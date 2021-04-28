@@ -1,33 +1,33 @@
+import argparse
 import os
 from pathlib import Path
 
 from datasets import getCifarSmallImbalancedDatasets
-from utils import plot_results
+from utils import plot_results, plot_features
 from modelUtils import *
 
 
-
-if __name__ == "__main__":
-
+def main(args):
     class_names = {0: 'airplane', 1: 'automobile', 2: 'bird', 3: 'cat', 4: 'deer',
                    5: 'dog', 6: 'frog', 7: 'horse', 8: 'ship', 9: 'truck'}
 
-    num_epochs = 5
-    target_class = 5
-    anomal_classes = [0]
+    num_epochs = args.num_epochs
+    target_class = args.target_class
+    anomal_classes = args.anomal_classes
     num_anomal_classes = len(anomal_classes)
     anomal_classes_names = ','.join([class_names[i] for i in anomal_classes])
-    gamma = 0.9
-    normal_subset_size = 150
-    anomal_subset_size = 10
-    lr = 5e-5
-    feature_extractor_version = 'resnet18'
+    gamma = args.gamma
+    normal_subset_size = args.normal_subset_size
+    anomal_subset_size = args.anomal_subset_size
+    lr = args.lr
+    feature_extractor_version = args.feature_extractor_version
+    root_dir_path = args.dir_path
 
     balanced_dataset_size = anomal_subset_size
     one_class_dataset_size = normal_subset_size - anomal_subset_size
 
     file_name_str = f"results_{num_epochs}_{num_anomal_classes}_{gamma}_{balanced_dataset_size}_{one_class_dataset_size}_{lr}"
-    dir_path_str = f"./{file_name_str}"
+    dir_path_str = f"{root_dir_path}/{file_name_str}"
 
     if not Path(dir_path_str).exists():
         os.makedirs(dir_path_str)
@@ -76,3 +76,21 @@ if __name__ == "__main__":
     test_loop(device, test_dataloader, model, torch.nn.CrossEntropyLoss(), log_file)
     log_file.close()
     plot_results(train_losses, train_accuracies, validation_losses, validation_accuracies, dir_path_str)
+    plot_features(device, model, test_dataloader, dir_path_str)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('--num_epochs', type=int, default=5)
+    parser.add_argument('--target_class', type=int, default=5)
+    parser.add_argument('--anomal_classes', nargs= '+' ,default=[0,1,2,3])
+    parser.add_argument('--gamma', type=float, default=0.9)
+    parser.add_argument('--normal_subset_size', type=int, default=150)
+    parser.add_argument('--anomal_subset_size', type=int, default=10)
+    parser.add_argument('--lr', type=float, default=5e-5)
+    parser.add_argument('--feature_extractor_version', default='resnet18')
+    parser.add_argument('--dir_path', default='.')
+
+
+    args = parser.parse_args()
+    main(args)

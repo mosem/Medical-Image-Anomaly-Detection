@@ -60,7 +60,13 @@ def get_tsne(features):
     return tx, ty
 
 
-def plot_features(features, labels, raw_labels, dir_path):
+def plot_features(device, model, test_dataloader, dir_path):
+    data, labels, raw_labels = next(iter(test_dataloader))
+    model.eval()
+    features = model.get_features(data.to(device)).cpu().detach().numpy()
+    labels = labels.cpu().detach().numpy()
+    raw_labels = raw_labels.cpu().detach().numpy()
+
     fig = plt.figure()
     ax = fig.add_subplot(111)
 

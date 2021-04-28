@@ -137,7 +137,7 @@ def train_model(device, train_dataloader, validation_dataloader, model, log_file
 
     for epoch in range(num_epochs):
         print(f"Epoch {epoch + 1}\n-------------------------------")
-        log_file.write(f"Epoch {epoch + 1}\n-------------------------------")
+        log_file.write(f"Epoch {epoch + 1}\n-------------------------------\n")
         train_compactness_loss, train_classification_loss, train_avg_loss = train_loop(device, train_dataloader, model,
                                                                                        compactness_loss_fn,
                                                                                        cross_entropy_loss_fn, optimizer,
