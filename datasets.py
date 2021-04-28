@@ -104,7 +104,7 @@ def getCifarSmallImbalancedDatasets(normal_dataset_target,
                                         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
     train_set = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                             download=True, transform=train_transforms)
+                                             download=True, transform=train_transform)
 
     validation_set = torchvision.datasets.CIFAR10(root='./data', train=False,
                                                   download=True, transform=val_transform)

@@ -12,7 +12,7 @@ if __name__ == "__main__":
     class_names = {0: 'airplane', 1: 'automobile', 2: 'bird', 3: 'cat', 4: 'deer',
                    5: 'dog', 6: 'frog', 7: 'horse', 8: 'ship', 9: 'truck'}
 
-    num_epochs = 25
+    num_epochs = 5
     target_class = 5
     anomal_classes = [0]
     num_anomal_classes = len(anomal_classes)
@@ -27,7 +27,7 @@ if __name__ == "__main__":
     one_class_dataset_size = normal_subset_size - anomal_subset_size
 
     file_name_str = f"results_{num_epochs}_{num_anomal_classes}_{gamma}_{balanced_dataset_size}_{one_class_dataset_size}_{lr}"
-    dir_path_str = f"/content/{file_name_str}"
+    dir_path_str = f"./{file_name_str}"
 
     if not Path(dir_path_str).exists():
         os.makedirs(dir_path_str)
