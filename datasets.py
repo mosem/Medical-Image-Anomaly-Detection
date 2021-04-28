@@ -29,9 +29,9 @@ class custom_subset(torch.utils.data.Dataset):
         self.is_normal = is_normal
 
     def __getitem__(self, idx):
-        image = self.dataset[idx][0]
-        target = 0 if self.is_normal else 1
-        return (image, target)
+        image, raw_label = self.dataset[idx]
+        label = 0 if self.is_normal else 1
+        return image, label, raw_label
 
     def __len__(self):
         return len(self.dataset)
@@ -90,30 +90,54 @@ def getCifarTestset(normal_dataset, anomal_dataset,
     return ConcatDataset([normal_subset, anomal_subset])
 
 
-def getCifarSmallImbalancedDatasets(normal_dataset_target):
-    transform = transforms.Compose(
-        [transforms.ToTensor(),
-         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+def getCifarSmallImbalancedDatasets(normal_dataset_target,
+                                    anomal_classes=[],
+                                    num_anomal_classes=2,
+                                    normal_subset_size=150,
+                                    anomal_subset_size=10):
+    if anomal_classes == []:
+        anomal_classes = sample([i for i in range(10) if i != normal_dataset_target], num_anomal_classes)
 
-    data_set = torchvision.datasets.CIFAR10(root='./data', train=True,
-                                            download=True, transform=transform)
+    train_transform = transforms.Compose([transforms.RandomResizedCrop(224),
+                                          transforms.RandomHorizontalFlip(),
+                                          transforms.ToTensor(),
+                                          transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
-    normal_dataset = _extract_class(data_set, normal_dataset_target, True)
-    anomal_dataset = ConcatDataset([_extract_class(data_set, i, False)
-                                    for i in range(10) if i != normal_dataset_target])
+    val_transform = transforms.Compose([transforms.Resize(256),
+                                        transforms.CenterCrop(224),
+                                        transforms.ToTensor(),
+                                        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
-    train_set = SmallImbalancedDataset(normal_dataset, anomal_dataset)
-    normal_mask_indices = train_set.normal_subset_indices
-    anomal_mask_indices = train_set.anomal_subset_indices
-    validation_set = SmallImbalancedDataset(normal_dataset, anomal_dataset,
-                                            normal_mask_indices, anomal_mask_indices)
+    train_set = torchvision.datasets.CIFAR10(root='./data', train=True,
+                                             download=True, transform=train_transforms)
 
-    normal_mask_indices += validation_set.normal_subset_indices
-    anomal_mask_indices += validation_set.anomal_subset_indices
+    validation_set = torchvision.datasets.CIFAR10(root='./data', train=False,
+                                                  download=True, transform=val_transform)
 
-    test_set = getCifarTestset(normal_dataset, anomal_dataset,
-                               normal_subset_size=150, anomal_subset_size=150,
-                               normal_mask_indices=normal_mask_indices, anomal_mask_indices=anomal_mask_indices)
+    normal_train_dataset = _extract_class(train_set, normal_dataset_target, True)
+
+    anomal_train_dataset = ConcatDataset([_extract_class(train_set, i, False)
+                                          for i in anomal_classes])
+
+    normal_val_dataset = _extract_class(validation_set, normal_dataset_target, True)
+    anomal_val_dataset = ConcatDataset([_extract_class(validation_set, i, False)
+                                        for i in anomal_classes])
+
+    train_set = SmallImbalancedDataset(normal_train_dataset, anomal_train_dataset,
+                                       normal_mask_indices=[],
+                                       anomal_mask_indices=[],
+                                       normal_subset_size=normal_subset_size,
+                                       anomal_subset_size=anomal_subset_size)
+
+    validation_set = SmallImbalancedDataset(normal_val_dataset, anomal_val_dataset,
+                                            normal_mask_indices=[],
+                                            anomal_mask_indices=[],
+                                            normal_subset_size=normal_subset_size,
+                                            anomal_subset_size=anomal_subset_size)
+
+    test_set = getCifarTestset(normal_val_dataset, anomal_val_dataset,
+                               normal_subset_size=50, anomal_subset_size=50,
+                               normal_mask_indices=validation_set.normal_subset_indices,
+                               anomal_mask_indices=validation_set.anomal_subset_indices)
 
     return train_set, validation_set, test_set
-
