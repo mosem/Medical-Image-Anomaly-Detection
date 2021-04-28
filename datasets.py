@@ -2,15 +2,10 @@ from __future__ import print_function, division
 
 import torch
 
-
-from torch.optim import lr_scheduler
 import numpy as np
 import torchvision
-from torchvision import datasets, models, transforms
+from torchvision import transforms
 from torch.utils.data import Subset, ConcatDataset
-import time
-import os
-import copy
 from random import sample
 
 

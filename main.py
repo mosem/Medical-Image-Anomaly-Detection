@@ -1,8 +1,6 @@
 import os
 from pathlib import Path
 
-import torch
-
 from datasets import getCifarSmallImbalancedDatasets
 from utils import plot_results
 from modelUtils import *
