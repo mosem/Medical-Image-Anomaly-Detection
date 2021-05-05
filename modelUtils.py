@@ -10,6 +10,7 @@ import numpy as np
 
 
 def train_loop(device, dataloader, model, compactness_loss_fn, cross_entropy_loss_fn, optimizer, log_file, gamma):
+    print('train loop started.')
     dataloader_size = len(dataloader.dataset)
     running_compactness_loss = 0.0
     running_cross_entropy_loss = 0.0
