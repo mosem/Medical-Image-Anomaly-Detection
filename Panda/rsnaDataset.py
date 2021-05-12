@@ -1,5 +1,5 @@
 import numpy as np
-import dicom
+import pydicom as dicom
 import torch
 from torch.utils.data import Subset, ConcatDataset
 from pandas import read_csv
@@ -49,8 +49,8 @@ class rsna_dataset(torch.utils.data.Dataset):
 
 
     def __getitem__(self, idx):
-        img_path = self.lookup_table.loc[idx, 'filepath']
-        img_label = self.lookup_table.loc[idx, 'Label']
+        img_path = self.lookup_table.loc[idx, 'filepath'].item()
+        img_label = self.lookup_table.loc[idx, 'Label'].item()
         dicom_image = dicom.dcmread(img_path)
         normalized_image = normalize_dicom(dicom_image)
         tensor_image = self.transform(normalized_image)

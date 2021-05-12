@@ -1,5 +1,5 @@
 import numpy as np
-import dicom
+import pydicom as dicom
 import torch
 from torch.utils.data import Subset, ConcatDataset
 from pandas import read_csv
