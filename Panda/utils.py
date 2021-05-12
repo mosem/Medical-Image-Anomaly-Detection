@@ -96,6 +96,7 @@ def get_loaders(dataset, label_class, batch_size, lookup_tables_paths=None):
     elif dataset in ['rsna']:
         if dataset == 'rsna':
             train_loader, test_loader = rsnaDataset.get_loaders(lookup_tables_paths, batch_size)
+            return train_loader, test_loader
     else:
         print('Unsupported Dataset')
         exit()
