@@ -4,7 +4,6 @@ import torch
 from pandas import read_csv
 from pathlib import Path
 from PIL import Image
-import os
 
 def window_image(pixel_array, window_center, window_width, is_normalize=True):
     image_min = window_center - window_width // 2
@@ -29,8 +28,9 @@ def normalize_dicom(dicom):
     subdural    = window_image(pixel_array, 80, 200)
     soft_tissue = window_image(pixel_array, 40, 380)
 
-    image = np.dstack([soft_tissue,subdural,brain])
-    image = (image*255).astype(np.uint8)
+    image_array = np.dstack([soft_tissue,subdural,brain])
+    image_array = (image_array*255).astype(np.uint8)
+    image = Image.fromarray(image_array)
     return image
 
 class rsna_dataset(torch.utils.data.Dataset):
@@ -50,7 +50,6 @@ class rsna_dataset(torch.utils.data.Dataset):
         img_path = self.lookup_table.loc[idx, 'filepath']
         img_label = self.lookup_table.loc[idx, 'Label']
         dicom_image = dicom.dcmread(img_path)
-        normalized_dicom = normalize_dicom(dicom_image)
-        image = Image.fromarray(normalized_dicom)
-        tensor_image = self.transform(image)
-        return tensor_image, img_label, os.path.basename(img_path)
+        normalized_image = normalize_dicom(dicom_image)
+        tensor_image = self.transform(normalized_image)
+        return tensor_image, img_label
