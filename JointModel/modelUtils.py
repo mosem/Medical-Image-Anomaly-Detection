@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 
-from jointModel import JointModel
+from models import JointModel
 from losses import CompactnessLoss
 
 from sklearn import metrics
