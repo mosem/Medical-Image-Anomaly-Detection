@@ -4,6 +4,7 @@ import torchvision.transforms as transforms
 import numpy as np
 import faiss
 import ResNet
+import rsnaDataset
 
 mvtype = ['bottle', 'cable', 'capsule', 'carpet', 'grid', 'hazelnut', 'leather',
           'metal_nut', 'pill', 'screw', 'tile', 'toothbrush', 'transistor',
@@ -70,7 +71,7 @@ def get_outliers_loader(batch_size):
     outlier_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
     return outlier_loader
 
-def get_loaders(dataset, label_class, batch_size):
+def get_loaders(dataset, label_class, batch_size, lookup_tables_paths=None):
     if dataset in ['cifar10', 'fashion']:
         if dataset == "cifar10":
             ds = torchvision.datasets.CIFAR10
@@ -92,6 +93,9 @@ def get_loaders(dataset, label_class, batch_size):
         train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2, drop_last=False)
         test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2, drop_last=False)
         return train_loader, test_loader
+    elif dataset in ['rsna']:
+        if dataset == 'rsna':
+            train_loader, test_loader = rsnaDataset.get_loaders(lookup_tables_paths, batch_size)
     else:
         print('Unsupported Dataset')
         exit()
