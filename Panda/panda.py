@@ -18,8 +18,8 @@ def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     for epoch in range(args.epochs):
         running_loss = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
-        auc, feature_space = get_score(model, device, train_loader, test_loader)
-        print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
+    auc, feature_space = get_score(model, device, train_loader, test_loader)
+    print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
 
 
 def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
