@@ -7,6 +7,7 @@ from pathlib import Path
 from PIL import Image
 from torchvision import transforms
 
+
 def window_image(pixel_array, window_center, window_width, is_normalize=True):
     image_min = window_center - window_width // 2
     image_max = window_center + window_width // 2
@@ -35,7 +36,7 @@ def normalize_dicom(dicom):
     image = Image.fromarray(image_array)
     return image
 
-class rsna_dataset(torch.utils.data.Dataset):
+class RsnaDataset(torch.utils.data.Dataset):
 
     def __init__(self, lookup_table_file_path, transform):
         self.lookup_table_file_path = Path(lookup_table_file_path)
@@ -49,33 +50,44 @@ class rsna_dataset(torch.utils.data.Dataset):
 
 
     def __getitem__(self, idx):
-        img_path = self.lookup_table.loc[idx, 'filepath'].item()
-        img_label = self.lookup_table.loc[idx, 'Label'].item()
+        img_path = self.lookup_table.loc[idx, 'filepath']
+        if (type(img_path) != str):
+            img_path = img_path.item()
+        img_label = self.lookup_table.loc[idx, 'Label']
+        if (type(img_label) != int):
+            img_label = img_label.item()
         dicom_image = dicom.dcmread(img_path)
         normalized_image = normalize_dicom(dicom_image)
         tensor_image = self.transform(normalized_image)
         return tensor_image, img_label
 
+class RsnaConcatDataset(torch.utils.data.ConcatDataset):
+
+    def __init__(self, rsna_datasets):
+        super().__init__(rsna_datasets)
+        self.targets = []
+        for rsna_dataset in rsna_datasets:
+            self.targets.append(rsna_dataset.targets)
 
 def split_tables_to_datasets(lookup_tables_paths, transform):
     normal_subsets = []
     anomal_subsets = []
     for path in lookup_tables_paths:
-        dataset = rsna_dataset(path, transform)
+        dataset = RsnaDataset(path, transform)
         normal_indices = np.argwhere(dataset.targets==0)
         anomal_indices = np.argwhere(dataset.targets==1)
         normal_subsets.append(Subset(dataset, normal_indices))
         anomal_subsets.append(Subset(dataset, anomal_indices))
-    normal_dataset = ConcatDataset(normal_subsets)
-    anomal_dataset = ConcatDataset(anomal_subsets)
+    normal_dataset = RsnaConcatDataset(normal_subsets)
+    anomal_dataset = RsnaConcatDataset(anomal_subsets)
     return normal_dataset, anomal_dataset
 
 
 def getRsnaTestset(lookup_tables_paths, transform):
     datasets = []
     for path in lookup_tables_paths:
-        datasets.append(rsna_dataset(path, transform))
-    return ConcatDataset(datasets)
+        datasets.append(RsnaDataset(path, transform))
+    return RsnaConcatDataset(datasets)
 
 
 def get_loaders(lookup_tables_paths, batch_size):
