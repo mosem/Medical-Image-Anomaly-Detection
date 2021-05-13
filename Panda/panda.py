@@ -89,9 +89,10 @@ def main(args):
         ewc_loss = EWCLoss(frozen_model, fisher)
 
     utils.freeze_parameters(model)
-    lookup_tables_paths = (args.train_lookup_tables, args.test_lookup_tables)
+    train_lookup_tables = args.train_lookup_tables.split(' ')
+    test_lookup_tables = args.test_lookup_tables.split(' ')
     train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label,
-                                                  batch_size=args.batch_size, lookup_tables_paths=lookup_tables_paths)
+                                                  batch_size=args.batch_size, lookup_tables_paths=(train_lookup_tables, test_lookup_tables))
     train_model(model, train_loader, test_loader, device, args, ewc_loss)
 
 
@@ -106,9 +107,11 @@ if __name__ == "__main__":
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--train_lookup_tables',
-                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/lookup_tables/dir_001_lookup_table.csv')
+                        default=['/content/drive/MyDrive/anomaly_detection/data/rsna/lookup_tables/dir_001_lookup_table.csv'],
+                        type=list)
     parser.add_argument('--test_lookup_tables',
-                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/lookup_tables/dir_004_lookup_table.csv')
+                        default=['/content/drive/MyDrive/anomaly_detection/data/rsna/lookup_tables/dir_004_lookup_table.csv'],
+                        type=list)
 
     args = parser.parse_args()
 
