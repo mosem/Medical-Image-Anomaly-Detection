@@ -35,7 +35,7 @@ def normalize_dicom(dicom):
 
     image_array = np.dstack([soft_tissue,subdural,brain])
     image_array = (image_array*255).astype(np.uint8)
-    return image_array
+    return torch.from_numpy(image_array)
 
 class RsnaDataset3D(torch.utils.data.Dataset):
 
