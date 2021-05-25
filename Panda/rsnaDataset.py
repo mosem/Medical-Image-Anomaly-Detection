@@ -51,8 +51,8 @@ class RsnaDataset3D(torch.utils.data.Dataset):
 
 
     def __getitem__(self, idx):
-        label = self.frame.loc[idx, 'label']
-        return self.__get_images(self.frame.loc[idx, 'path'], self.frame.loc[idx, 'indices']), label
+        label = self.lookup_table.loc[idx, 'label']
+        return self.__get_images(self.lookup_table.loc[idx, 'path'], self.lookup_table.loc[idx, 'indices']), label
 
 
     def __get_images(self, item_table_path, indices):
