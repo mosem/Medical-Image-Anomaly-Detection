@@ -6,6 +6,7 @@ from pandas import read_csv
 from pathlib import Path
 from PIL import Image
 from torchvision import transforms
+import pandas as pd
 
 
 def window_image(pixel_array, window_center, window_width, is_normalize=True):
@@ -36,24 +37,64 @@ def normalize_dicom(dicom):
     image = Image.fromarray(image_array)
     return image
 
-class RsnaDataset(torch.utils.data.Dataset):
+
+class RsnaDataset3D(torch.utils.data.Dataset):
 
     def __init__(self, lookup_table_file_path, transform):
-        self.lookup_table_file_path = Path(lookup_table_file_path)
-        self.transform = transform
         self.lookup_table = read_csv(lookup_table_file_path)
-        self.targets = np.array(self.lookup_table['Label'])
+        self.transform = transform
+        self.targets = self.lookup_table['label'].to_numpy()
 
 
     def __len__(self):
-        return len(self.lookup_table.index)
+        return len(self.targets)
 
 
     def __getitem__(self, idx):
-        img_path = self.lookup_table.loc[idx, 'filepath']
+        label = self.frame.loc[idx, 'label']
+        return self.__get_images(self.frame.loc[idx, 'path'], self.frame.loc[idx, 'indices']), label
+
+
+    def __get_images(self, item_table_path, indices):
+        table = read_csv(item_table_path)
+        images = []
+        for idx in indices:
+            img_path = table.loc[idx, 'filepath']
+            dicom_image = dicom.dcmread(img_path)
+            normalized_image = normalize_dicom(dicom_image)
+            tensor_image = self.transform(normalized_image)
+            images.append(tensor_image)
+        return torch.stack(images, dim=0)
+
+
+class RsnaDataset(torch.utils.data.Dataset):
+
+    def __init__(self, lookup_table_file_path, transform, balanced=False):
+        self.lookup_table_file_path = Path(lookup_table_file_path)
+        self.transform = transform
+        self.lookup_table = read_csv(lookup_table_file_path)
+        normal_indices = self.lookup_table.index[self.lookup_table['Label']==0].tolist()
+        anomal_indices = self.lookup_table.index[self.lookup_table['Label']==1].tolist()
+        if balanced:
+            max_num_samples = min(len(anomal_indices), len(normal_indices))
+            normal_indices = normal_indices[:max_num_samples]
+            anomal_indices = anomal_indices[:max_num_samples]
+            self.indices = normal_indices + anomal_indices
+        else:
+            self.indices = [i for i in range(len(self.lookup_table))]
+        self.targets = np.array(self.lookup_table.loc[self.indices, 'Label'])
+
+
+    def __len__(self):
+        return len(self.indices)
+
+
+    def __getitem__(self, idx):
+        raw_idx = self.indices[idx]
+        img_path = self.lookup_table.loc[raw_idx, 'filepath']
         if (type(img_path) != str):
             img_path = img_path.item()
-        img_label = self.lookup_table.loc[idx, 'Label']
+        img_label = self.lookup_table.loc[raw_idx, 'Label']
         if (type(img_label) != int):
             img_label = img_label.item()
         dicom_image = dicom.dcmread(img_path)
@@ -67,7 +108,8 @@ class RsnaConcatDataset(torch.utils.data.ConcatDataset):
         super().__init__(rsna_datasets)
         self.targets = []
         for rsna_dataset in rsna_datasets:
-            self.targets.append(rsna_dataset.targets)
+            if hasattr(rsna_dataset, 'targets'):
+                self.targets.extend(rsna_dataset.targets)
 
 def split_tables_to_datasets(lookup_tables_paths, transform):
     normal_subsets = []
@@ -76,8 +118,12 @@ def split_tables_to_datasets(lookup_tables_paths, transform):
         dataset = RsnaDataset(path, transform)
         normal_indices = np.argwhere(dataset.targets==0)
         anomal_indices = np.argwhere(dataset.targets==1)
-        normal_subsets.append(Subset(dataset, normal_indices))
-        anomal_subsets.append(Subset(dataset, anomal_indices))
+        normal_subset = Subset(dataset, normal_indices)
+        normal_subset.targets = dataset.targets[normal_indices]
+        anomal_subset = Subset(dataset, anomal_indices)
+        anomal_subset.targets = dataset.targets[anomal_indices]
+        normal_subsets.append(normal_subset)
+        anomal_subsets.append(anomal_subset)
     normal_dataset = RsnaConcatDataset(normal_subsets)
     anomal_dataset = RsnaConcatDataset(anomal_subsets)
     return normal_dataset, anomal_dataset
