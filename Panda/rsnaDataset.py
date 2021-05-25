@@ -170,3 +170,22 @@ def get_loaders(lookup_tables_paths, batch_size):
     return train_dataloader, test_dataloader
 
 
+def get_loaders3D(lookup_tables_paths, batch_size):
+    train_lookup_tables_path, test_lookup_tables_path = lookup_tables_paths
+
+    train_transform = transforms.Compose([transforms.CenterCrop(448),
+                                          transforms.RandomHorizontalFlip(),
+                                          transforms.ToTensor()])
+
+    test_transform = transforms.Compose([transforms.CenterCrop(448),
+                                          transforms.ToTensor()])
+
+    train_dataset = RsnaDataset3D(train_lookup_tables_path, train_transform)
+    test_dataset = RsnaDataset3D(test_lookup_tables_path, test_transform)
+
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size,
+                                                   shuffle=True, num_workers=2, drop_last=False)
+    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size,
+                                                  shuffle=False, num_workers=2, drop_last=False)
+
+    return train_dataloader, test_dataloader
