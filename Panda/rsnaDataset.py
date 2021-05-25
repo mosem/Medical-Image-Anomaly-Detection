@@ -67,7 +67,7 @@ class RsnaDataset3D(torch.utils.data.Dataset):
             normalized_image = normalize_dicom(dicom_image)
             tensor_image = self.transform(normalized_image)
             images.append(tensor_image)
-        return torch.stack(images, dim=0)
+        return torch.stack(images, dim=3)
 
 
 class RsnaDataset(torch.utils.data.Dataset):
