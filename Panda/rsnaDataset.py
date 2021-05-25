@@ -6,6 +6,7 @@ from pandas import read_csv
 from pathlib import Path
 from PIL import Image
 from torchvision import transforms
+import ast
 import pandas as pd
 
 
@@ -52,7 +53,9 @@ class RsnaDataset3D(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         label = self.lookup_table.loc[idx, 'label']
-        return self.__get_images(self.lookup_table.loc[idx, 'path'], self.lookup_table.loc[idx, 'indices']), label
+        path = self.lookup_table.loc[idx, 'path']
+        indices = ast.literal_eval(self.lookup_table.loc[idx, 'indices'])
+        return self.__get_images(path, indices), label
 
 
     def __get_images(self, item_table_path, indices):
