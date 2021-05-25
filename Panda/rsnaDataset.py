@@ -64,7 +64,7 @@ class RsnaDataset3D(torch.utils.data.Dataset):
             img_path = table.loc[idx, 'filepath']
             dicom_image = dicom.dcmread(img_path)
             normalized_image = normalize_dicom(dicom_image)
-            tensor_image = self.transform(normalized_image)
+            tensor_image = self.transform(normalized_image).permute(1,2,0) #convert from CxWxH to WxHxC
             images.append(tensor_image)
         return np.stack(images, axis=3)
 
