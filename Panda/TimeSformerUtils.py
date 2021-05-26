@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 from timesformer.models.vit import TimeSformer
 
@@ -8,6 +9,7 @@ model_urls = {
 class TimeSformerWrapper(nn.Module):
 
     def __init__(self, model_path=model_urls['timesformer-HR']):
+        super(TimeSformerWrapper, self).__init__()
         self.timesformer_model = TimeSformer(img_size=448, num_classes=400, num_frames=16, attention_type='divided_space_time',
                                  pretrained_model=model_path)
 
