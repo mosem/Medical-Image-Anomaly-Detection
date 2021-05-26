@@ -2,14 +2,14 @@ import torch.nn as nn
 from timesformer.models.vit import TimeSformer
 
 model_urls = {
-    'timesformer-HR': 'https://www.dropbox.com/s/9t68uzk8w2fpfnv/TimeSformer_divST_16_448_SSv2.pyth?dl=0'
+    'timesformer-HR': '/content/drive/MyDrive/anomaly_detection/timesformer_models/TimeSformer_divST_16_448_SSv2.pyth'
 }
 
 class TimeSformerWrapper(nn.Module):
 
-    def __init__(self, model_url=model_urls['timesformer-HR']):
+    def __init__(self, model_path=model_urls['timesformer-HR']):
         self.timesformer_model = TimeSformer(img_size=448, num_classes=400, num_frames=16, attention_type='divided_space_time',
-                                 pretrained_model=model_url)
+                                 pretrained_model=model_path)
 
         self.vision_transformer_model = self.timesformer_model.model
 

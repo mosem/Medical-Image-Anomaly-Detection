@@ -79,7 +79,7 @@ def main(args):
     if model_type == 'resnet':
         model = utils.get_resnet_model(resnet_type=args.resnet_type)
     elif model_type == 'timesformer':
-        model = utils.get_timesformer_model()
+        model = utils.get_timesformer_model(model_path=args.timesformer_path)
     model = model.to(device)
 
     ewc_loss = None
@@ -109,6 +109,7 @@ if __name__ == "__main__":
     parser.add_argument('--label', default=0, type=int, help='The normal class')
     parser.add_argument('--lr', type=float, default=1e-2, help='The initial learning rate.')
     parser.add_argument('--model', default='resnet')
+    parser.add_argument('--timesformer_path', default='/content/drive/MyDrive/anomaly_detection/timesformer_models/TimeSformer_divST_16_448_SSv2.pyth')
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--train_lookup_tables',
