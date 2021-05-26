@@ -92,7 +92,7 @@ def main(args):
         fisher = torch.load(args.diag_path)
         ewc_loss = EWCLoss(frozen_model, fisher)
 
-    utils.freeze_parameters(model)
+    # utils.freeze_parameters(model)
     train_lookup_tables = args.train_lookup_tables.split(' ')
     test_lookup_tables = args.test_lookup_tables.split(' ')
     train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label,
