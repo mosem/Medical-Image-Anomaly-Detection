@@ -5,6 +5,7 @@ import numpy as np
 import faiss
 import ResNet
 import rsnaDataset
+from Panda.TimeSformerUtils import TimeSformerWrapper
 
 mvtype = ['bottle', 'cable', 'capsule', 'carpet', 'grid', 'hazelnut', 'leather',
           'metal_nut', 'pill', 'screw', 'tile', 'toothbrush', 'transistor',
@@ -39,8 +40,7 @@ def get_resnet_model(resnet_type=152):
         return ResNet.resnet152(pretrained=True, progress=True)
 
 def get_timesformer_model():
-    model = TimeSformer(img_size=224, num_classes=400, num_frames=8, attention_type='divided_space_time',
-                        pretrained_model='/path/to/pretrained/model.pyth')
+    return TimeSformerWrapper()
 
 
 def freeze_model(model):

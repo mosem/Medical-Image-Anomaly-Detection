@@ -75,7 +75,11 @@ def main(args):
     print('Dataset: {}, Normal Label: {}, LR: {}'.format(args.dataset, args.label, args.lr))
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(device)
-    model = utils.get_resnet_model(resnet_type=args.resnet_type)
+    model_type = args.model
+    if model_type == 'resnet':
+        model = utils.get_resnet_model(resnet_type=args.resnet_type)
+    elif model_type == 'timesformer':
+        model = utils.get_timesformer_model()
     model = model.to(device)
 
     ewc_loss = None
@@ -104,6 +108,7 @@ if __name__ == "__main__":
     parser.add_argument('--epochs', default=15, type=int, metavar='epochs', help='number of epochs')
     parser.add_argument('--label', default=0, type=int, help='The normal class')
     parser.add_argument('--lr', type=float, default=1e-2, help='The initial learning rate.')
+    parser.add_argument('--model', default='resnet')
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--train_lookup_tables',
