@@ -52,21 +52,30 @@ class RsnaDataset3D(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         label = self.lookup_table.loc[idx, 'label']
-        path = self.lookup_table.loc[idx, 'path']
-        indices = ast.literal_eval(self.lookup_table.loc[idx, 'indices'])
-        return self.__get_images(path, indices), label
+        # indices = ast.literal_eval(self.lookup_table.loc[idx, 'indices'])
+        img_paths = ast.literal_eval(self.lookup_table.loc[idx, 'filepaths'])
+        return self.__get_images(img_paths), label
 
 
-    def __get_images(self, item_table_path, indices):
-        table = read_csv(item_table_path)
+    def __get_images(self, img_paths):
         images = []
-        for idx in indices:
-            img_path = table.loc[idx, 'filepath']
+        for img_path in img_paths:
             dicom_image = dicom.dcmread(img_path)
             normalized_image = normalize_dicom(dicom_image)
             tensor_image = self.transform(normalized_image) # CxHxW
             images.append(tensor_image)
         return torch.stack(images, dim=1) # CxFxHxW
+
+    # def __get_images(self, item_table_path, indices):
+    #     table = read_csv(item_table_path)
+    #     images = []
+    #     for idx in indices:
+    #         img_path = table.loc[idx, 'filepath']
+    #         dicom_image = dicom.dcmread(img_path)
+    #         normalized_image = normalize_dicom(dicom_image)
+    #         tensor_image = self.transform(normalized_image) # CxHxW
+    #         images.append(tensor_image)
+    #     return torch.stack(images, dim=1) # CxFxHxW
 
 
 class RsnaDataset(torch.utils.data.Dataset):
