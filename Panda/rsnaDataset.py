@@ -51,6 +51,7 @@ class RsnaDataset3D(torch.utils.data.Dataset):
 
 
     def __getitem__(self, idx):
+        print(self.lookup_table)
         label = self.lookup_table.loc[idx, 'label']
         # indices = ast.literal_eval(self.lookup_table.loc[idx, 'indices'])
         img_paths = ast.literal_eval(self.lookup_table.loc[idx, 'filepaths'])
