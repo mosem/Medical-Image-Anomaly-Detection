@@ -17,5 +17,5 @@ class TimeSformerWrapper(nn.Module):
 
     def forward(self, x):
         features = self.vision_transformer_model.forward_features(x)
-        x = self.vision_transformer_model.head(x)
+        x = self.vision_transformer_model.head(features)
         return x, features
