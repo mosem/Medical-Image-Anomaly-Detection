@@ -170,21 +170,21 @@ def get_loaders(lookup_tables_paths, batch_size):
 def get_loaders3D(lookup_tables_paths, batch_size):
     train_lookup_tables_path, test_lookup_tables_path = lookup_tables_paths
 
-    # train_transform = transforms.Compose([transforms.Resize(256),
-    #                                       transforms.CenterCrop(224),
-    #                                       transforms.RandomHorizontalFlip(),
-    #                                       transforms.ToTensor()])
-    #
-    # test_transform = transforms.Compose([transforms.Resize(256),
-    #                                      transforms.CenterCrop(224),
-    #                                      transforms.ToTensor()])
-
-    train_transform = transforms.Compose([transforms.CenterCrop(448),
+    train_transform = transforms.Compose([transforms.Resize(256),
+                                          transforms.CenterCrop(224),
                                           transforms.RandomHorizontalFlip(),
                                           transforms.ToTensor()])
 
-    test_transform = transforms.Compose([transforms.CenterCrop(448),
+    test_transform = transforms.Compose([transforms.Resize(256),
+                                         transforms.CenterCrop(224),
                                          transforms.ToTensor()])
+
+    # train_transform = transforms.Compose([transforms.CenterCrop(448),
+    #                                       transforms.RandomHorizontalFlip(),
+    #                                       transforms.ToTensor()])
+    #
+    # test_transform = transforms.Compose([transforms.CenterCrop(448),
+    #                                      transforms.ToTensor()])
 
     train_dataset = RsnaDataset3D(train_lookup_tables_path[0], train_transform)
     test_dataset = RsnaDataset3D(test_lookup_tables_path[0], test_transform)
