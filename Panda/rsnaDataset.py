@@ -41,7 +41,7 @@ def normalize_dicom(dicom):
 class RsnaDataset3D(torch.utils.data.Dataset):
 
     def __init__(self, lookup_table_file_path, transform):
-        self.lookup_table = read_csv(lookup_table_file_path)
+        self.lookup_table = read_csv(lookup_table_file_path, index_col=[0])
         self.transform = transform
         self.targets = self.lookup_table['label'].to_numpy()
 
