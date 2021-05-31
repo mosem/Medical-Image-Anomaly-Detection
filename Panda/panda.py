@@ -7,6 +7,7 @@ from losses import CompactnessLoss, EWCLoss
 import utils
 from copy import deepcopy
 from tqdm import tqdm
+import gc
 
 def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     model.eval()
@@ -15,13 +16,15 @@ def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0)
     criterion = CompactnessLoss(center.to(device))
+    del feature_space
+    gc.collect()
     for epoch in range(args.epochs):
         running_loss = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
-    if args.epochs > 0:
         auc, feature_space = get_score(model, device, train_loader, test_loader)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
-
+        del feature_space
+        gc.collect()
 
 def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
     running_loss = 0.0
