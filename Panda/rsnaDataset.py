@@ -59,9 +59,11 @@ class RsnaDataset3D(torch.utils.data.Dataset):
     def __get_images(self, img_paths):
         images = []
         for img_path in img_paths:
-            dicom_image = dicom.dcmread(img_path)
-            normalized_image = normalize_dicom(dicom_image)
-            tensor_image = self.transform(normalized_image) # CxHxW
+            with Image.open(img_paths) as image:
+            # dicom_image = dicom.dcmread(img_path)
+            # normalized_image = normalize_dicom(dicom_image)
+            # tensor_image = self.transform(normalized_image) # CxHxW
+            tensor_image = self.transform(image) # CxHxW
             images.append(tensor_image)
         return torch.stack(images, dim=1) # CxFxHxW
 
