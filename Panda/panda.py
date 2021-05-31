@@ -115,9 +115,9 @@ if __name__ == "__main__":
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--train_lookup_tables',
-                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-800-train/lookup_table.csv')
+                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-800-png-train/lookup_table.csv')
     parser.add_argument('--test_lookup_tables',
-                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-200-test/lookup_table.csv')
+                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-200-png-test/lookup_table.csv')
 
     args = parser.parse_args()
 
