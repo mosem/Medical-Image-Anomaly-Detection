@@ -39,8 +39,8 @@ def get_resnet_model(resnet_type=152):
     else:  #152
         return ResNet.resnet152(pretrained=True, progress=True)
 
-def get_timesformer_model(model_path):
-    return TimeSformerWrapper(model_path)
+def get_timesformer_model(mode):
+    return TimeSformerWrapper(mode)
 
 
 def freeze_model(model):

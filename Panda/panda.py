@@ -80,7 +80,7 @@ def main(args):
     if model_type == 'resnet':
         model = utils.get_resnet_model(resnet_type=args.resnet_type)
     elif model_type == 'timesformer':
-        model = utils.get_timesformer_model(model_path=args.timesformer_path)
+        model = utils.get_timesformer_model(mode=args.timesformer_mode)
     model = model.to(device)
 
     ewc_loss = None
@@ -105,12 +105,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--dataset', default='cifar10')
     parser.add_argument('--diag_path', default='./data/fisher_diagonal.pth', help='fim diagonal path')
-    parser.add_argument('--ewc', action='store_false', help='Train with EWC')
+    parser.add_argument('--ewc', action='store_true', help='Train with EWC')
     parser.add_argument('--epochs', default=15, type=int, metavar='epochs', help='number of epochs')
     parser.add_argument('--label', default=0, type=int, help='The normal class')
     parser.add_argument('--lr', type=float, default=1e-2, help='The initial learning rate.')
     parser.add_argument('--model', default='resnet')
-    parser.add_argument('--timesformer_path', default='/content/drive/MyDrive/anomaly_detection/timesformer_models/TimeSformer_divST_8x32_224_K400.pyth')
+    parser.add_argument('--timesformer_mode', default='standard')
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--train_lookup_tables',
