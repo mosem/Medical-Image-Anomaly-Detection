@@ -261,9 +261,11 @@ class ResNet3D(nn.Module):
 
     def forward(self, x):
         """"
-            x: tensor of size batch_size x channels x frames x height x width
+            :x tensor of size batch_size x channels x frames x height x width
+            :returns    pred of size batch_size x frames x 1
+                        features of size batch_size x frames x features_dimension
         """
-        output_pred = [] # batch_size x frames x features_dimension
+        output_pred = [] # batch_size x frames x 1
         output_features = [] # batch_size x frames x features_dimension
         for sample in torch.split(x, 1, 0):
             # sample is size of channels x frames x height x width

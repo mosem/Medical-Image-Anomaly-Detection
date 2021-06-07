@@ -3,6 +3,8 @@ import torch
 from sklearn.metrics import roc_auc_score
 import torch.optim as optim
 import argparse
+
+from ResNet import ResNet3D
 from losses import CompactnessLoss, EWCLoss
 import utils
 from copy import deepcopy
@@ -92,6 +94,8 @@ def main(args):
     model_type = args.model
     if model_type == 'resnet':
         model = utils.get_resnet_model(resnet_type=args.resnet_type)
+        if args.dataset in ['rsna3D']:
+            model = ResNet3D(model)
     elif model_type == 'timesformer':
         model = utils.get_timesformer_model(mode=args.timesformer_mode)
     model = model.to(device)
