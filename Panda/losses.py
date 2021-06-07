@@ -7,8 +7,12 @@ class CompactnessLoss(nn.Module):
         self.center = center
 
     def forward(self, inputs):
-        m = inputs.size(1)
-        variances = (inputs - self.center).norm(dim=1).pow(2) / m
+        if len(inputs.size()) == 3:
+            m = inputs.size(2)
+            variances = ((inputs-self.center).norm(dim=2).pow(2)/m).sum(dim=1)
+        else:
+            m = inputs.size(1)
+            variances = (inputs - self.center).norm(dim=1).pow(2) / m
         return variances.mean()
 
 

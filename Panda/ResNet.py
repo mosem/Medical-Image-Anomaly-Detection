@@ -251,6 +251,29 @@ class ResNet(nn.Module):
                 counter += 1
         print('n of req grad params: {}, n of total parameters: {}'.format(counter, len(list(self.parameters()))))
 
+
+class ResNet3D(nn.Module):
+
+    def __init__(self, resNet2D):
+        super(ResNet3D, self).__init__()
+        self.resNet2D = resNet2D
+
+
+    def forward(self, x):
+        """"
+            x: tensor of size batch_size x channels x frames x height x width
+        """
+        output_pred = [] # batch_size x frames x features_dimension
+        output_features = [] # batch_size x frames x features_dimension
+        for sample in torch.split(x, 1, 0):
+            # sample is size of channels x frames x height x width
+            slices = sample.permute((1,0,2,3)) # frames x channels x height x width
+            slices_pred, slices_features = self.resNet2D.forward(slices) # frames x features_dimension
+            output_pred.append(slices_pred)
+            output_features.append(slices_features)
+        return torch.stack(output_pred, dim=0), torch.stack(output_features, dim=0)
+
+
 def _resnet(arch, block, layers, pretrained, progress, **kwargs):
     model = ResNet(block, layers, **kwargs)
     if pretrained:

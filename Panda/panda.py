@@ -58,14 +58,24 @@ def get_score(model, device, train_loader, test_loader):
         for (imgs, _) in tqdm(train_loader, desc='Train set feature extracting'):
             imgs = imgs.to(device)
             _, features = model(imgs)
-            train_feature_space.append(features)
+            if (len(features.size()) == 3):
+                batch_size, n_slices = features.size()[:2]
+                two_d_features = features.view(batch_size*n_slices, -1)
+                train_feature_space.extend(two_d_features)
+            else:
+                train_feature_space.append(features)
         train_feature_space = torch.cat(train_feature_space, dim=0).contiguous().cpu().numpy()
     test_feature_space = []
     with torch.no_grad():
         for (imgs, _) in tqdm(test_loader, desc='Test set feature extracting'):
             imgs = imgs.to(device)
             _, features = model(imgs)
-            test_feature_space.append(features)
+            if (len(features.size()) == 3):
+                batch_size, n_slices = features.size()[:2]
+                two_d_features = features.view(batch_size * n_slices, -1)
+                test_feature_space.extend(two_d_features)
+            else:
+                test_feature_space.append(features)
         test_feature_space = torch.cat(test_feature_space, dim=0).contiguous().cpu().numpy()
         test_labels = test_loader.dataset.targets
 
@@ -118,9 +128,9 @@ if __name__ == "__main__":
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--train_lookup_tables',
-                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-800-png-train/lookup_table.csv')
+                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-1000-png-train/lookup_table.csv')
     parser.add_argument('--test_lookup_tables',
-                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-200-png-test/lookup_table.csv')
+                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-200-png-test-1000/lookup_table.csv')
 
     args = parser.parse_args()
 
