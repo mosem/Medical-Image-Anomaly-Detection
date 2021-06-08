@@ -68,6 +68,7 @@ def get_score(model, device, train_loader, test_loader):
                 train_feature_space.extend(two_d_features)
             else:
                 train_feature_space.append(features)
+        print(torch.cat(train_feature_space, dim=0).shape)
         train_feature_space = torch.cat(train_feature_space, dim=0).contiguous().cpu().numpy()
     test_feature_space = []
     with torch.no_grad():
