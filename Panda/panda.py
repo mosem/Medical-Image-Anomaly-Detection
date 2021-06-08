@@ -62,7 +62,9 @@ def get_score(model, device, train_loader, test_loader):
             _, features = model(imgs)
             if (len(features.size()) == 3):
                 batch_size, n_slices = features.size()[:2]
+                print(f"features shape: {features.shape}")
                 two_d_features = features.view(batch_size*n_slices, -1)
+                print(f"two d features shape: {two_d_features.shape}")
                 train_feature_space.extend(two_d_features)
             else:
                 train_feature_space.append(features)
