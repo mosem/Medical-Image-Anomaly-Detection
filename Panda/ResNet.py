@@ -274,6 +274,7 @@ class ResNet3D(nn.Module):
         output_features = [] # batch_size x frames x features_dimension
         for sample in torch.split(x, 1, 0):
             # sample is size of channels x frames x height x width
+            print(sample.size())
             slices = sample.permute((1,0,2,3)) # frames x channels x height x width
             slices_pred, slices_features = self.resNet2D.forward(slices) # frames x features_dimension
             output_pred.append(slices_pred)
