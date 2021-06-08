@@ -80,7 +80,7 @@ def get_score(model, device, train_loader, test_loader):
                 test_feature_space.append(features)
         test_feature_space = torch.cat(test_feature_space, dim=0).contiguous().cpu().numpy()
         test_labels = test_loader.dataset.targets
-
+    print(train_feature_space.shape())
     distances = utils.knn_score(train_feature_space, test_feature_space)
 
     auc = roc_auc_score(test_labels, distances)
@@ -132,9 +132,9 @@ if __name__ == "__main__":
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--train_lookup_tables',
-                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-1000-png-train/lookup_table.csv')
+                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/16-frame-data-train-dummy/lookup_table.csv')
     parser.add_argument('--test_lookup_tables',
-                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-200-png-test-1000/lookup_table.csv')
+                        default='/content/drive/MyDrive/anomaly_detection/data/rsna/16-frame-data-test-dummy/lookup_table.csv')
 
     args = parser.parse_args()
 
