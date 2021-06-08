@@ -8,8 +8,8 @@ class CompactnessLoss(nn.Module):
 
     def forward(self, inputs):
         if len(inputs.size()) == 3:
-            m = inputs.size(2)
-            variances = ((inputs-self.center).norm(dim=2).pow(2)/m).sum(dim=1)
+            m = inputs.size(2) # features_dim_size
+            variances = ((inputs-self.center).norm(dim=2).pow(2)/m).sum(dim=1) # sum along slices
         else:
             m = inputs.size(1)
             variances = (inputs - self.center).norm(dim=1).pow(2) / m

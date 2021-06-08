@@ -257,6 +257,12 @@ class ResNet3D(nn.Module):
     def __init__(self, resNet2D):
         super(ResNet3D, self).__init__()
         self.resNet2D = resNet2D
+        self.conv1 = self.resNet2D.conv1
+        self.bn1 = self.resNet2D.bn1
+        self.layer1 = self.resNet2D.layer1
+        self.layer2 = self.resNet2D.layer2
+        self.fc = self.resNet2D.fc
+        
 
 
     def forward(self, x):
