@@ -62,13 +62,10 @@ def get_score(model, device, train_loader, test_loader):
             _, features = model(imgs)
             if (len(features.size()) == 3):
                 batch_size, n_slices = features.size()[:2]
-                print(f"features shape: {features.shape}")
                 two_d_features = features.view(batch_size*n_slices, -1)
-                print(f"two d features shape: {two_d_features.shape}")
                 train_feature_space.append(two_d_features)
             else:
                 train_feature_space.append(features)
-        print(torch.cat(train_feature_space, dim=0).shape)
         train_feature_space = torch.cat(train_feature_space, dim=0).contiguous().cpu().numpy()
     test_feature_space = []
     with torch.no_grad():
@@ -78,12 +75,11 @@ def get_score(model, device, train_loader, test_loader):
             if (len(features.size()) == 3):
                 batch_size, n_slices = features.size()[:2]
                 two_d_features = features.view(batch_size * n_slices, -1)
-                test_feature_space.extend(two_d_features)
+                test_feature_space.append(two_d_features)
             else:
                 test_feature_space.append(features)
         test_feature_space = torch.cat(test_feature_space, dim=0).contiguous().cpu().numpy()
         test_labels = test_loader.dataset.targets
-    print(train_feature_space.shape)
     distances = utils.knn_score(train_feature_space, test_feature_space)
 
     auc = roc_auc_score(test_labels, distances)
