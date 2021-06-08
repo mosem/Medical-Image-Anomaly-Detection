@@ -65,7 +65,7 @@ def get_score(model, device, train_loader, test_loader):
                 print(f"features shape: {features.shape}")
                 two_d_features = features.view(batch_size*n_slices, -1)
                 print(f"two d features shape: {two_d_features.shape}")
-                train_feature_space.extend(two_d_features)
+                train_feature_space.append(two_d_features)
             else:
                 train_feature_space.append(features)
         print(torch.cat(train_feature_space, dim=0).shape)
