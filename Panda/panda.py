@@ -80,7 +80,10 @@ def get_score(model, device, train_loader, test_loader):
                 test_feature_space.append(features)
         test_feature_space = torch.cat(test_feature_space, dim=0).contiguous().cpu().numpy()
         test_labels = test_loader.dataset.targets
+
     distances = utils.knn_score(train_feature_space, test_feature_space)
+    if len(features.size()) == 3:
+        distances = np.array(list(map(sum, distances.split(batch_size))))
 
     auc = roc_auc_score(test_labels, distances)
 
