@@ -83,7 +83,7 @@ def get_score(model, device, train_loader, test_loader):
 
     distances = utils.knn_score(train_feature_space, test_feature_space)
     if len(features.size()) == 3:
-        distances = np.array(list(map(sum, np.split(distances, batch_size))))
+        distances = np.array(list(map(sum, np.split(distances, len(test_labels)))))
 
     auc = roc_auc_score(test_labels, distances)
 
