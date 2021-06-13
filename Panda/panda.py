@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, roc_curve
 import torch.optim as optim
 import argparse
 
@@ -13,20 +13,18 @@ import gc
 
 def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     model.eval()
-    auc, feature_space = get_score(model, device, train_loader, test_loader)
+    auc, feature_space, roc_results = get_score(model, device, train_loader, test_loader)
     print('Epoch: {}, AUROC is: {}'.format(0, auc))
+    print(f"FPR: {roc_results[0]}, TPR: {roc_results[1]}, Thresholds: {roc_results[2]}")
     optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0)
     criterion = CompactnessLoss(center.to(device))
-    del feature_space
-    gc.collect()
     for epoch in range(args.epochs):
         running_loss = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
-        auc, feature_space = get_score(model, device, train_loader, test_loader)
+        auc, feature_space, roc_results = get_score(model, device, train_loader, test_loader)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
-        del feature_space
-        gc.collect()
+        print(f"FPR: {roc_results[0]}, TPR: {roc_results[1]}, Thresholds: {roc_results[2]}")
 
 def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
     running_loss = 0.0
@@ -83,11 +81,13 @@ def get_score(model, device, train_loader, test_loader):
 
     distances = utils.knn_score(train_feature_space, test_feature_space)
     if len(features.size()) == 3:
-        distances = np.array(list(map(sum, np.split(distances, len(test_labels)))))/n_slices # avg from each set of slices
+        distances = np.array(list(map(min, np.split(distances, len(test_labels))))) # MIN from each set of slices
 
     auc = roc_auc_score(test_labels, distances)
 
-    return auc, train_feature_space
+    fpr, tpr, thresholds = roc_curve(test_labels, distances)
+
+    return auc, train_feature_space, (fpr,tpr,thresholds)
 
 def main(args):
     print('Dataset: {}, Normal Label: {}, LR: {}'.format(args.dataset, args.label, args.lr))
@@ -114,10 +114,9 @@ def main(args):
 
     if model_type == 'resnet':
         utils.freeze_parameters(model)
-    train_lookup_tables = args.train_lookup_tables.split(' ')
-    test_lookup_tables = args.test_lookup_tables.split(' ')
     train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label,
-                                                  batch_size=args.batch_size, lookup_tables_paths=(train_lookup_tables, test_lookup_tables))
+                                                  batch_size=args.batch_size,
+                                                  lookup_tables_paths=(args.train_lookup_table, args.test_lookup_tables))
     train_model(model, train_loader, test_loader, device, args, ewc_loss)
 
 
@@ -133,9 +132,9 @@ if __name__ == "__main__":
     parser.add_argument('--timesformer_mode', default='standard')
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
     parser.add_argument('--batch_size', default=32, type=int)
-    parser.add_argument('--train_lookup_tables',
+    parser.add_argument('--train_lookup_table',
                         default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-1000-png-train/lookup_table.csv')
-    parser.add_argument('--test_lookup_tables',
+    parser.add_argument('--test_lookup_table',
                         default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-200-png-test-1000/lookup_table.csv')
 
     args = parser.parse_args()
