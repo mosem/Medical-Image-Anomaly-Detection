@@ -114,6 +114,7 @@ def main(args):
 
     if model_type == 'resnet':
         utils.freeze_parameters(model)
+    print(args.train_lookup_table, args.test_lookup_table)
     train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label,
                                                   batch_size=args.batch_size,
                                                   lookup_tables_paths=(args.train_lookup_table, args.test_lookup_table))
