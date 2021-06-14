@@ -183,7 +183,7 @@ if __name__ == "__main__":
     parser.add_argument('--test_lookup_table',
                         default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-200-png-test-1000/lookup_table.csv')
     parser.add_argument('--results_output_dir',
-                        default='/content/drive/MyDrive/anomaly_detection/results')
+                        default='/content/drive/MyDrive/anomaly_detection/results/rsna')
 
     args = parser.parse_args()
 
