@@ -264,8 +264,8 @@ class ResNet3D(nn.Module):
         self.fc = self.resNet2D.fc
 
 
-    def named_parameters(self):
-        return self.resNet2D.named_parameters()
+    def named_parameters(self, prefix='', recurse=True):
+        return self.resNet2D.named_parameters(prefix, recurse)
 
     def forward(self, x):
         """"
