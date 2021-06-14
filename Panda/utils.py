@@ -67,8 +67,8 @@ def knn_score(train_set, test_set, n_neighbours=2):
     """
     index = faiss.IndexFlatL2(train_set.shape[1])
     index.add(train_set)
-    D, _ = index.search(test_set, n_neighbours)
-    return np.sum(D, axis=1)
+    D, indices = index.search(test_set, n_neighbours)
+    return D, indices
 
 def get_outliers_loader(batch_size):
     dataset = torchvision.datasets.ImageFolder(root='./data/tiny', transform=transform_color)

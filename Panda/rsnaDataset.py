@@ -44,7 +44,7 @@ class RsnaDataset3D(torch.utils.data.Dataset):
         self.lookup_table = read_csv(lookup_table_file_path, index_col=[0])
         self.transform = transform
         self.targets = self.lookup_table['label'].to_numpy()
-
+        self.ids = self.lookup_table['ID'].to_numpy()
 
     def __len__(self):
         return len(self.targets)
@@ -83,6 +83,7 @@ class RsnaDataset(torch.utils.data.Dataset):
             self.indices = normal_indices + anomal_indices
         else:
             self.indices = [i for i in range(len(self.lookup_table))]
+        self.ids = np.array(self.lookup_table.loc[self.indices, 'ID'])
         self.targets = np.array(self.lookup_table.loc[self.indices, 'Label'])
 
 

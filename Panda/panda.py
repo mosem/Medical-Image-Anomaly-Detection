@@ -3,28 +3,31 @@ import torch
 from sklearn.metrics import roc_auc_score, roc_curve
 import torch.optim as optim
 import argparse
+import os
 
 from ResNet import ResNet3D
 from losses import CompactnessLoss, EWCLoss
 import utils
 from copy import deepcopy
 from tqdm import tqdm
-import gc
+import pandas as pd
 
 def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     model.eval()
-    auc, feature_space, roc_results = get_score(model, device, train_loader, test_loader)
+    auc, feature_space, results = get_score(model, device, train_loader, test_loader)
     print('Epoch: {}, AUROC is: {}'.format(0, auc))
-    print(f"FPR: {roc_results[0]}, TPR: {roc_results[1]}, Thresholds: {roc_results[2]}")
     optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0)
     criterion = CompactnessLoss(center.to(device))
     for epoch in range(args.epochs):
         running_loss = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
-        auc, feature_space, roc_results = get_score(model, device, train_loader, test_loader)
+        auc, feature_space, results = get_score(model, device, train_loader, test_loader, epoch == args.epochs-1)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
-        print(f"FPR: {roc_results[0]}, TPR: {roc_results[1]}, Thresholds: {roc_results[2]}")
+    results_filename = '_'.join(args.dataset, args.model, str(args.lr), str(args.epochs))
+    results_path = os.path.join(args.results_output_dir, results_filename, '.csv')
+    results.to_csv(results_path)
+
 
 def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
     running_loss = 0.0
@@ -52,7 +55,34 @@ def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
     return running_loss / (i + 1)
 
 
-def get_score(model, device, train_loader, test_loader):
+def find_optimal_threshold(target, predicted):
+    fpr, tpr, threshold = roc_curve(target, predicted)
+    i = np.arange(len(tpr))
+    roc = pd.DataFrame({'tf': pd.Series(tpr - (1 - fpr), index=i), 'threshold': pd.Series(threshold, index=i)})
+    roc_t = roc.iloc[(roc.tf - 0).abs().argsort()[:1]]
+    return list(roc_t['threshold'])
+
+
+def get_nearest_neighbours_results(train_loader, distances, indices):
+    results = []
+    for distance, idx_list in zip(distances, indices):
+        if len(indices.shape) == 3:
+            results.append((((train_loader.dataset.ids[x[0]], x[1]), distance) for x in idx_list))
+        else:
+            results.append(((train_loader.dataset.ids[i], distance) for i in idx_list))
+    return results
+
+
+def get_results(train_loader, test_loader, distances, indices):
+    results  = pd.DataFrame(columns=['ID', 'target', 'prediction', 'nearest neighbours'])
+    results['ID'] = test_loader.dataset.ids
+    results['target'] = test_loader.dataset.targets
+
+    optimal_threshold = find_optimal_threshold(test_loader.dataset.targets, distances)
+    results['prediction'] = np.where(distances > optimal_threshold, 0, 1)
+    results['nearest_neighbours'] = get_nearest_neighbours_results(train_loader, distances, indices)
+
+def get_train_feature_space(model, device, train_loader):
     train_feature_space = []
     with torch.no_grad():
         for (imgs, _) in tqdm(train_loader, desc='Train set feature extracting'):
@@ -60,11 +90,15 @@ def get_score(model, device, train_loader, test_loader):
             _, features = model(imgs)
             if (len(features.size()) == 3):
                 batch_size, n_slices = features.size()[:2]
-                two_d_features = features.view(batch_size*n_slices, -1)
+                two_d_features = features.view(batch_size * n_slices, -1)
                 train_feature_space.append(two_d_features)
             else:
                 train_feature_space.append(features)
         train_feature_space = torch.cat(train_feature_space, dim=0).contiguous().cpu().numpy()
+    return train_feature_space
+
+
+def get_test_feature_space(model, device, test_loader):
     test_feature_space = []
     with torch.no_grad():
         for (imgs, _) in tqdm(test_loader, desc='Test set feature extracting'):
@@ -77,17 +111,28 @@ def get_score(model, device, train_loader, test_loader):
             else:
                 test_feature_space.append(features)
         test_feature_space = torch.cat(test_feature_space, dim=0).contiguous().cpu().numpy()
-        test_labels = test_loader.dataset.targets
+    return test_feature_space
 
-    distances = utils.knn_score(train_feature_space, test_feature_space)
-    if len(features.size()) == 3:
-        distances = np.array(list(map(min, np.split(distances, len(test_labels))))) # MIN from each set of slices
 
-    auc = roc_auc_score(test_labels, distances)
+def get_score(model, device, train_loader, test_loader, results_flag=False):
+    train_feature_space = get_train_feature_space(model, device, train_loader)
+    test_feature_space = get_test_feature_space(model, device, test_loader)
+    test_labels = test_loader.dataset.targets
 
-    fpr, tpr, thresholds = roc_curve(test_labels, distances)
+    distances, indices = utils.knn_score(train_feature_space, test_feature_space)
+    summed_distances = np.sum(distances, axis=1)
+    if type(model) is ResNet3D:
+        summed_distances = np.array(list(map(min, np.split(summed_distances, len(test_labels))))) # MIN from each set of slices
+        indices = np.array(list(map(lambda x: [(i // 8, i % 8) for i in x], indices)))
 
-    return auc, train_feature_space, (fpr,tpr,thresholds)
+    if results_flag:
+        results = get_results(train_loader, test_loader, distances, indices)
+    else:
+        results = None
+
+    auc = roc_auc_score(test_labels, summed_distances)
+
+    return auc, train_feature_space, results
 
 def main(args):
     print('Dataset: {}, Normal Label: {}, LR: {}'.format(args.dataset, args.label, args.lr))
@@ -137,6 +182,8 @@ if __name__ == "__main__":
                         default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-1000-png-train/lookup_table.csv')
     parser.add_argument('--test_lookup_table',
                         default='/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-200-png-test-1000/lookup_table.csv')
+    parser.add_argument('--results_output_dir',
+                        default='/content/drive/MyDrive/anomaly_detection/results')
 
     args = parser.parse_args()
 
