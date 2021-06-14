@@ -4,6 +4,7 @@ from sklearn.metrics import roc_auc_score, roc_curve
 import torch.optim as optim
 import argparse
 import os
+from pathlib import Path
 
 from ResNet import ResNet3D
 from losses import CompactnessLoss, EWCLoss
@@ -24,8 +25,17 @@ def train_model(model, train_loader, test_loader, device, args, ewc_loss):
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
         auc, feature_space, results = get_score(model, device, train_loader, test_loader, epoch == args.epochs-1)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
+    save_results(results, args)
+
+
+def save_results(results, args):
+    head, tail = os.path.split(args.test_lookup_table)
+    results_dir_name = head.split(os.path.sep)[-1]
+    results_dir_full_path = os.path.join(args.results_output_dir, results_dir_name)
+    if not Path(results_dir_full_path).is_dir():
+        os.mkdir(results_dir_full_path)
     results_filename = '_'.join(args.dataset, args.model, str(args.lr), str(args.epochs))
-    results_path = os.path.join(args.results_output_dir, results_filename, '.csv')
+    results_path = os.path.join(results_dir_full_path, results_filename, '.csv')
     results.to_csv(results_path)
 
 
@@ -74,12 +84,13 @@ def get_nearest_neighbours_results(train_loader, distances, indices):
 
 
 def get_results(train_loader, test_loader, distances, indices):
+    summed_distances = np.sum(distances, axis=1)
     results  = pd.DataFrame(columns=['ID', 'target', 'prediction', 'nearest neighbours'])
     results['ID'] = test_loader.dataset.ids
     results['target'] = test_loader.dataset.targets
 
-    optimal_threshold = find_optimal_threshold(test_loader.dataset.targets, distances)
-    results['prediction'] = np.where(distances > optimal_threshold, 0, 1)
+    optimal_threshold = find_optimal_threshold(test_loader.dataset.targets, summed_distances)
+    results['prediction'] = np.where(summed_distances > optimal_threshold, 0, 1)
     results['nearest_neighbours'] = get_nearest_neighbours_results(train_loader, distances, indices)
 
 def get_train_feature_space(model, device, train_loader):

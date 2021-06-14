@@ -264,6 +264,9 @@ class ResNet3D(nn.Module):
         self.fc = self.resNet2D.fc
 
 
+    def named_parameters(self):
+        return self.resNet2D.named_parameters()
+
     def forward(self, x):
         """"
             :x tensor of size batch_size x channels x frames x height x width
