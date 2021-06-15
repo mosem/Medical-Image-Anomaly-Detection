@@ -20,6 +20,7 @@ def train_model(model, train_loader, test_loader, device, args, ewc_loss):
     optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0)
     criterion = CompactnessLoss(center.to(device))
+    results = None
     for epoch in range(args.epochs):
         running_loss = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
@@ -140,6 +141,7 @@ def get_score(model, device, train_loader, test_loader, results_flag=False):
         raw_distances = np.split(raw_distances, len(test_labels))
 
     if results_flag:
+        print('getting results')
         nearest_neighbours_results = get_nearest_neighbours_results(train_loader, raw_distances, indices, is_3d_data)
         results = get_results(test_loader, summed_distances, nearest_neighbours_results)
     else:
