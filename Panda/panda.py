@@ -15,7 +15,7 @@ import pandas as pd
 
 def train_model(model, sorted_train_loader, shuffled_train_loader, test_loader, device, args, ewc_loss):
     model.eval()
-    auc, feature_space, results = get_score(model, device, sorted_train_loader, test_loader)
+    auc, feature_space, results = get_score(model, device, sorted_train_loader, test_loader, args.epochs == 0)
     print('Epoch: {}, AUROC is: {}'.format(0, auc))
     optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0)
