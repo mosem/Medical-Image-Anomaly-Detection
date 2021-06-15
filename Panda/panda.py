@@ -78,14 +78,16 @@ def get_nearest_neighbours_results(train_loader, raw_distances, indices, is_3d_d
     if is_3d_data:
         for patient_distances, patient_indices in zip(raw_distances, indices):
             patient_result = []
-            for distance, idx in zip(patient_distances, patient_indices):
-                print(idx, distance)
-                print((train_loader.dataset.ids[idx[0]], idx[1], distance))
-                patient_result.append((train_loader.dataset.ids[idx[0]], idx[1], distance))
+            for neighbours_distances, neighbours_idxs in zip(patient_distances, patient_indices):
+                for distance, idx in zip(neighbours_distances, neighbours_idxs):
+                    print(idx, distance)
+
+                    print((train_loader.dataset.ids[idx[0]], idx[1], distance))
+                    patient_result.append((train_loader.dataset.ids[idx[0]], idx[1], distance))
             results.append(patient_result)
     else:
-        for distance, idx_list in zip(raw_distances, indices):
-            results.append(((train_loader.dataset.ids[i], distance) for i in idx_list))
+        for neighbours_distances, idx_list in zip(raw_distances, indices):
+            results.append(((train_loader.dataset.ids[i], neighbours_distances) for i in idx_list))
     return results
 
 
@@ -141,8 +143,9 @@ def get_score(model, device, train_loader, test_loader, results_flag=False):
     is_3d_data = type(model) is ResNet3D
     if is_3d_data:
         summed_distances = np.array(list(map(min, np.split(summed_distances, len(test_labels))))) # MIN from each set of slices
-
-        indices = np.array(list(map(lambda x: [(i // 8, i % 8) for i in x], indices)))
+        print(indices)
+        indices = np.array(list(map(lambda idx_list: [(i // 8, i % 8) for i in idx_list], indices)))
+        print(indices)
         indices = np.split(indices, len(test_labels))
         raw_distances = np.split(raw_distances, len(test_labels))
 
