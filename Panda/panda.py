@@ -74,8 +74,8 @@ def find_optimal_threshold(target, predicted):
 
 
 def get_nearest_neighbours_results(train_loader, distances, indices):
-    print(indices)
-    print(distances)
+    print(len(indices))
+    print(len(distances))
     results = []
     for distance, idx_list in zip(distances, indices):
         if len(indices.shape) == 3:
