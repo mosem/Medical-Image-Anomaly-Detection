@@ -34,7 +34,7 @@ def save_results(results, args):
     results_dir_full_path = os.path.join(args.results_output_dir, results_dir_name)
     if not Path(results_dir_full_path).is_dir():
         os.mkdir(results_dir_full_path)
-    results_filename = '_'.join(args.dataset, args.model, str(args.lr), str(args.epochs))
+    results_filename = '_'.join([args.dataset, args.model, str(args.lr), str(args.epochs)])
     results_path = os.path.join(results_dir_full_path, results_filename, '.csv')
     results.to_csv(results_path)
 
