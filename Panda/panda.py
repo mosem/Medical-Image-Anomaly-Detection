@@ -77,7 +77,12 @@ def get_nearest_neighbours_results(train_loader, raw_distances, indices, is_3d_d
     results = []
     for distance, idx_list in zip(raw_distances, indices):
         if is_3d_data:
-            results.append([((train_loader.dataset.ids[x[0]], x[1]), distance) for x in idx_list])
+            patient_result = []
+            for sub_list in idx_list:
+                print(sub_list)
+                patient_result.append([((train_loader.dataset.ids[x[0]], x[1]), distance) for x in sub_list])
+                print(patient_result)
+            results.append(patient_result)
         else:
             results.append(((train_loader.dataset.ids[i], distance) for i in idx_list))
     return results
