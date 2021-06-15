@@ -132,7 +132,9 @@ def get_score(model, device, train_loader, test_loader, results_flag=False):
 
     distances, indices = utils.knn_score(train_feature_space, test_feature_space)
     summed_distances = np.sum(distances, axis=1)
+    print(type(model))
     if type(model) is ResNet3D:
+        print('changing dimensions of summed distances')
         summed_distances = np.array(list(map(min, np.split(summed_distances, len(test_labels))))) # MIN from each set of slices
         indices = np.array(list(map(lambda x: [(i // 8, i % 8) for i in x], indices)))
 
