@@ -94,16 +94,17 @@ def get_loaders(dataset, label_class, batch_size, lookup_tables_paths=None):
         testset.targets = [int(t != label_class) for t in testset.targets]
         trainset.data = trainset.data[idx]
         trainset.targets = [trainset.targets[i] for i, flag in enumerate(idx, 0) if flag]
-        train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2, drop_last=False)
+        shuffled_train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=2, drop_last=False)
+        sorted_train_loader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=False, num_workers=2, drop_last=False)
         test_loader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=2, drop_last=False)
-        return train_loader, test_loader
+        return sorted_train_loader, shuffled_train_loader, test_loader
     elif dataset in ['rsna', 'rsna3D']:
         if dataset == 'rsna':
-            train_loader, test_loader = rsnaDataset.get_loaders(lookup_tables_paths, batch_size)
-            return train_loader, test_loader
+            sorted_train_loader, shuffled_train_loader, test_loader = rsnaDataset.get_loaders(lookup_tables_paths, batch_size)
+            return sorted_train_loader, shuffled_train_loader, test_loader
         if dataset == 'rsna3D':
-            train_loader, test_loader = rsnaDataset.get_loaders3D(lookup_tables_paths, batch_size)
-            return train_loader, test_loader
+            sorted_train_loader, shuffled_train_loader, test_loader = rsnaDataset.get_loaders3D(lookup_tables_paths, batch_size)
+            return sorted_train_loader, shuffled_train_loader, test_loader
     else:
         print('Unsupported Dataset')
         exit()

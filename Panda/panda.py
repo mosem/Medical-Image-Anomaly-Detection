@@ -13,17 +13,17 @@ from copy import deepcopy
 from tqdm import tqdm
 import pandas as pd
 
-def train_model(model, train_loader, test_loader, device, args, ewc_loss):
+def train_model(model, sorted_train_loader, shuffled_train_loader, test_loader, device, args, ewc_loss):
     model.eval()
-    auc, feature_space, results = get_score(model, device, train_loader, test_loader)
+    auc, feature_space, results = get_score(model, device, sorted_train_loader, test_loader)
     print('Epoch: {}, AUROC is: {}'.format(0, auc))
     optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=0.00005, momentum=0.9)
     center = torch.FloatTensor(feature_space).mean(dim=0)
     criterion = CompactnessLoss(center.to(device))
     for epoch in range(args.epochs):
-        running_loss = run_epoch(model, train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
+        running_loss = run_epoch(model, shuffled_train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
-        auc, feature_space, results = get_score(model, device, train_loader, test_loader, epoch == args.epochs-1)
+        auc, feature_space, results = get_score(model, device, sorted_train_loader, test_loader, epoch == args.epochs - 1)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
     save_results(results, args)
 
@@ -186,10 +186,10 @@ def main(args):
     if model_type == 'resnet':
         utils.freeze_parameters(model)
     print(args.train_lookup_table, args.test_lookup_table)
-    train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label,
+    sorted_train_loader, shuffled_train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label,
                                                   batch_size=args.batch_size,
                                                   lookup_tables_paths=(args.train_lookup_table, args.test_lookup_table))
-    train_model(model, train_loader, test_loader, device, args, ewc_loss)
+    train_model(model, sorted_train_loader, shuffled_train_loader, test_loader, device, args, ewc_loss)
 
 
 if __name__ == "__main__":

@@ -83,7 +83,7 @@ def main(args):
     model = model.to(device)
     utils.freeze_parameters(model, train_fc=True)
 
-    train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label, batch_size=args.batch_size)
+    _, train_loader, test_loader = utils.get_loaders(dataset=args.dataset, label_class=args.label, batch_size=args.batch_size)
     outliers_loader = utils.get_outliers_loader(args.batch_size)
 
     train_model(model, train_loader, outliers_loader, test_loader, device, args.epochs, args.lr)
