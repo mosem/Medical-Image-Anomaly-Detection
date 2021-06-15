@@ -73,24 +73,24 @@ def find_optimal_threshold(target, predicted):
     return list(roc_t['threshold'])
 
 
-def get_nearest_neighbours_results(train_loader, distances, indices):
+def get_nearest_neighbours_results(train_loader, raw_distances, indices, is_3d_data):
     results = []
-    for distance, idx_list in zip(distances, indices):
-        if len(indices.shape) == 3:
+    for distance, idx_list in zip(raw_distances, indices):
+        if is_3d_data:
             results.append((((train_loader.dataset.ids[x[0]], x[1]), distance) for x in idx_list))
         else:
             results.append(((train_loader.dataset.ids[i], distance) for i in idx_list))
     return results
 
 
-def get_results(train_loader, test_loader, raw_distances, summed_distances, indices):
+def get_results(test_loader, summed_distances, nearest_neighbors_results):
     results  = pd.DataFrame(columns=['ID', 'target', 'prediction', 'nearest neighbours'])
     results['ID'] = test_loader.dataset.ids
     results['target'] = test_loader.dataset.targets
 
     optimal_threshold = find_optimal_threshold(test_loader.dataset.targets, summed_distances)
     results['prediction'] = np.where(summed_distances > optimal_threshold, 0, 1)
-    results['nearest_neighbours'] = get_nearest_neighbours_results(train_loader, raw_distances, indices)
+    results['nearest_neighbours'] = nearest_neighbors_results
 
 def get_train_feature_space(model, device, train_loader):
     train_feature_space = []
@@ -131,14 +131,17 @@ def get_score(model, device, train_loader, test_loader, results_flag=False):
 
     raw_distances, indices = utils.knn_score(train_feature_space, test_feature_space)
     summed_distances = np.sum(raw_distances, axis=1)
-    if type(model) is ResNet3D:
+    is_3d_data = type(model) is ResNet3D
+    if is_3d_data:
         summed_distances = np.array(list(map(min, np.split(summed_distances, len(test_labels))))) # MIN from each set of slices
-        print(indices)
+
         indices = np.array(list(map(lambda x: [(i // 8, i % 8) for i in x], indices)))
-        print(indices)
+        indices = np.split(indices, len(test_labels))
+        raw_distances = np.split(raw_distances, len(test_labels))
 
     if results_flag:
-        results = get_results(train_loader, test_loader, raw_distances, summed_distances, indices)
+        nearest_neighbours_results = get_nearest_neighbours_results(train_loader, raw_distances, indices, is_3d_data)
+        results = get_results(test_loader, summed_distances, nearest_neighbours_results)
     else:
         results = None
 
