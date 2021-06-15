@@ -74,8 +74,6 @@ def find_optimal_threshold(target, predicted):
 
 
 def get_nearest_neighbours_results(train_loader, distances, indices):
-    print(len(indices))
-    print(len(distances))
     results = []
     for distance, idx_list in zip(distances, indices):
         if len(indices.shape) == 3:
@@ -135,7 +133,9 @@ def get_score(model, device, train_loader, test_loader, results_flag=False):
     summed_distances = np.sum(raw_distances, axis=1)
     if type(model) is ResNet3D:
         summed_distances = np.array(list(map(min, np.split(summed_distances, len(test_labels))))) # MIN from each set of slices
+        print(indices)
         indices = np.array(list(map(lambda x: [(i // 8, i % 8) for i in x], indices)))
+        print(indices)
 
     if results_flag:
         results = get_results(train_loader, test_loader, raw_distances, summed_distances, indices)
