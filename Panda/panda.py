@@ -144,9 +144,7 @@ def get_score(model, device, train_loader, test_loader, results_flag=False):
     is_3d_data = type(model) is ResNet3D
     if is_3d_data:
         summed_distances = np.array(list(map(min, np.split(summed_distances, len(test_labels))))) # MIN from each set of slices
-        print(indices)
         indices = np.array(list(map(lambda idx_list: [(i // 8, i % 8) for i in idx_list], indices)))
-        print(indices)
         indices = np.split(indices, len(test_labels))
         raw_distances = np.split(raw_distances, len(test_labels))
 
