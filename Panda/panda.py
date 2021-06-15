@@ -79,8 +79,10 @@ def get_nearest_neighbours_results(train_loader, raw_distances, indices, is_3d_d
         for patient_distances, patient_indices in zip(raw_distances, indices):
             patient_result = []
             for neighbours_distances, neighbours_idxs in zip(patient_distances, patient_indices):
+                slice_result = []
                 for distance, idx in zip(neighbours_distances, neighbours_idxs):
-                    patient_result.append((train_loader.dataset.ids[idx[0]], idx[1], distance))
+                    slice_result.append((train_loader.dataset.ids[idx[0]], idx[1], distance))
+                patient_result.append(slice_result)
             results.append(patient_result)
     else:
         for neighbours_distances, neighbours_idxs in zip(raw_distances, indices):
