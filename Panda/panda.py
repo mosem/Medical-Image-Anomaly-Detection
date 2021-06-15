@@ -77,7 +77,7 @@ def get_nearest_neighbours_results(train_loader, raw_distances, indices, is_3d_d
     results = []
     for distance, idx_list in zip(raw_distances, indices):
         if is_3d_data:
-            results.append((((train_loader.dataset.ids[x[0]], x[1]), distance) for x in idx_list))
+            results.append([((train_loader.dataset.ids[x[0]], x[1]), distance) for x in idx_list])
         else:
             results.append(((train_loader.dataset.ids[i], distance) for i in idx_list))
     return results
@@ -90,7 +90,7 @@ def get_results(test_loader, summed_distances, nearest_neighbors_results):
 
     optimal_threshold = find_optimal_threshold(test_loader.dataset.targets, summed_distances)
     results['prediction'] = np.where(summed_distances > optimal_threshold, 0, 1)
-    results['nearest_neighbours'] = nearest_neighbors_results
+    results['nearest neighbours'] = nearest_neighbors_results
     return results
 
 def get_train_feature_space(model, device, train_loader):
