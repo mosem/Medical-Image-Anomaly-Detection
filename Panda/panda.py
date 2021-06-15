@@ -101,7 +101,7 @@ def get_results(test_loader, summed_distances, nearest_neighbors_results):
 
     optimal_threshold = find_optimal_threshold(test_loader.dataset.targets, summed_distances)
     print(f"optimal threshold: {optimal_threshold}")
-    results['prediction'] = np.where(summed_distances > optimal_threshold, 0, 1)
+    results['prediction'] = np.where(summed_distances < optimal_threshold, 0, 1)
     results['nearest neighbours'] = nearest_neighbors_results
     return results
 
