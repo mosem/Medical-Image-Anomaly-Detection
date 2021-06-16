@@ -15,7 +15,7 @@ class TimeSformerWrapper(nn.Module):
             self.timesformer_model = TimeSformer(img_size=448, num_classes=400, num_frames=16, attention_type='divided_space_time',
                                  pretrained_model=model_urls['timesformer-HR'])
         else:
-            self.timesformer_model = TimeSformer(img_size=448, num_classes=400, num_frames=16, attention_type='divided_space_time',
+            self.timesformer_model = TimeSformer(img_size=224, num_classes=400, num_frames=8, attention_type='divided_space_time',
                                  pretrained_model=model_urls['timesfomer-standard'])
 
         self.vision_transformer_model = self.timesformer_model.model
