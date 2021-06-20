@@ -50,8 +50,7 @@ def freeze_model(model):
 
 def freeze_parameters(model, train_fc=False):
     if type(model) == TimeSformerWrapper:
-        print('not freezing timesformer params')
-        # freeze_timesformer_parameters(model.timesformer_model)
+        freeze_timesformer_parameters(model.timesformer_model)
     else:
         freeze_resnet_parameters(model, train_fc)
 
@@ -71,12 +70,14 @@ def freeze_resnet_parameters(model, train_fc):
 
 
 def freeze_timesformer_parameters(model):
-    for p in model.model.blocks[0].parameters():
+    for p in model.model.parameters():
         p.requires_grad = False
-    for p in model.model.blocks[1].parameters():
-        p.requires_grad = False
-    for p in model.model.blocks[2].parameters():
-        p.requires_grad = False
+    # for p in model.model.blocks[0].parameters():
+    #     p.requires_grad = False
+    # for p in model.model.blocks[1].parameters():
+    #     p.requires_grad = False
+    # for p in model.model.blocks[2].parameters():
+    #     p.requires_grad = False
 
 
 def knn_score(train_set, test_set, n_neighbours=2):
