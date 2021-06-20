@@ -70,7 +70,10 @@ def freeze_resnet_parameters(model, train_fc):
 
 
 def freeze_timesformer_parameters(model):
-    for p in model.model.parameters():
+    for i in range(model.model.depth):
+        for p in model.model.blocks[i].parameters():
+            p.requires_grad = False
+    for p in model.model.norm.parameters():
         p.requires_grad = False
     # for p in model.model.blocks[0].parameters():
     #     p.requires_grad = False
