@@ -50,7 +50,8 @@ def freeze_model(model):
 
 def freeze_parameters(model, train_fc=False):
     if type(model) == TimeSformerWrapper:
-        freeze_timesformer_parameters(model.timesformer_model)
+        print('not freezing timesformer params')
+        # freeze_timesformer_parameters(model.timesformer_model)
     else:
         freeze_resnet_parameters(model, train_fc)
 
