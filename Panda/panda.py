@@ -23,7 +23,8 @@ def train_model(model, sorted_train_loader, shuffled_train_loader, test_loader, 
     for epoch in range(args.epochs):
         running_loss = run_epoch(model, shuffled_train_loader, optimizer, criterion, device, args.ewc, ewc_loss)
         print('Epoch: {}, Loss: {}'.format(epoch + 1, running_loss))
-        auc, feature_space, results = get_score(model, device, sorted_train_loader, test_loader, epoch == args.epochs - 1)
+        auc, feature_space, results = get_score(model, device, sorted_train_loader, test_loader,
+                                                epoch == args.epochs - 1, criterion)
         print('Epoch: {}, AUROC is: {}'.format(epoch + 1, auc))
     save_results(results, args)
 
@@ -93,8 +94,15 @@ def get_nearest_neighbours_results(train_loader, raw_distances, indices, is_3d_d
     return results
 
 
-def get_results(test_loader, summed_distances, nearest_neighbors_results):
-    results  = pd.DataFrame(columns=['ID', 'target', 'prediction', 'nearest neighbours'])
+def get_loss_results(test_feature_space, criterion):
+    losses = []
+    for feature in test_feature_space:
+        losses.append(criterion(feature))
+    return losses
+
+
+def get_results(test_loader, summed_distances, nearest_neighbors_results, loss_results):
+    results  = pd.DataFrame(columns=['ID', 'target', 'prediction', 'nearest neighbours', 'loss'])
     results['ID'] = test_loader.dataset.ids
     results['target'] = test_loader.dataset.targets
 
@@ -102,6 +110,7 @@ def get_results(test_loader, summed_distances, nearest_neighbors_results):
     print(f"optimal threshold: {optimal_threshold}")
     results['prediction'] = np.where(summed_distances < optimal_threshold, 0, 1)
     results['nearest neighbours'] = nearest_neighbors_results
+    results['loss'] = loss_results
     return results
 
 def get_train_feature_space(model, device, train_loader):
@@ -136,7 +145,7 @@ def get_test_feature_space(model, device, test_loader):
     return test_feature_space
 
 
-def get_score(model, device, train_loader, test_loader, results_flag=False):
+def get_score(model, device, train_loader, test_loader, results_flag=False, criterion=None):
     train_feature_space = get_train_feature_space(model, device, train_loader)
     test_feature_space = get_test_feature_space(model, device, test_loader)
     test_labels = test_loader.dataset.targets
@@ -152,7 +161,8 @@ def get_score(model, device, train_loader, test_loader, results_flag=False):
 
     if results_flag:
         nearest_neighbours_results = get_nearest_neighbours_results(train_loader, raw_distances, indices, is_3d_data)
-        results = get_results(test_loader, summed_distances, nearest_neighbours_results)
+        loss_results = get_loss_results(test_feature_space, criterion)
+        results = get_results(test_loader, summed_distances, nearest_neighbours_results, loss_results)
     else:
         results = None
 
