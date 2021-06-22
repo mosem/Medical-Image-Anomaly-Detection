@@ -97,6 +97,7 @@ def get_nearest_neighbours_results(train_loader, raw_distances, indices, is_3d_d
 def get_loss_results(test_feature_space, criterion):
     losses = []
     for feature in test_feature_space:
+        print(feature)
         losses.append(criterion(feature))
     return losses
 
