@@ -3,15 +3,15 @@ import torch.nn as nn
 from timesformer.models.vit import TimeSformer
 
 model_urls = {
-    'timesfomer-standard' : '/content/drive/MyDrive/anomaly_detection/timesformer_models/TimeSformer_divST_8x32_224_K400.pyth',
-    'timesformer-HR': '/content/drive/MyDrive/anomaly_detection/timesformer_models/TimeSformer_divST_16_448_SSv2.pyth'
+    'timesfomer-standard' : '/vol/ep/mm/anomaly_detection/data/TimeSformer_divST_8x32_224_K400.pyth',
+    'timesformer-HR': '/vol/ep/mm/anomaly_detection/data/TimeSformer_divST_16_448_SSv2.pyth'
 }
 
 class TimeSformerWrapper(nn.Module):
 
     def __init__(self, mode='standard'):
         super(TimeSformerWrapper, self).__init__()
-        if mode == 'timesformer-HR':
+        if mode == 'hr':
             self.timesformer_model = TimeSformer(img_size=448, num_classes=400, num_frames=16, attention_type='divided_space_time',
                                  pretrained_model=model_urls['timesformer-HR'])
         else:

@@ -13,17 +13,27 @@ from PIL import Image
 import numpy as np
 from itertools import islice
 
-#TODO: change paths
+from skimage import measure, filters
+from skimage.morphology import binary_dilation, disk, reconstruction
 
-LABELS_MAP_FILEPATH = '/content/drive/MyDrive/anomaly_detection/data/rsna/stage_2_train.csv'
-OUTPUT_ROWDICT_FILEPATH = '/content/drive/MyDrive/anomaly_detection/data/rsna/rowDict.pickle'
-DATA_ROOT_DIR_PATH = '/content/drive/MyDrive/anomaly_detection/data/rsna/stage_2_train'
+import matplotlib.pyplot as plt
 
-PATIENT_TABLES_ROOT_DIR = '/content/drive/MyDrive/anomaly_detection/data/rsna/patient_tables'
-DATASET_PATH = '/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data.csv'
-LOOKUP_TABLES_ROOT_DIR = '/content/drive/MyDrive/anomaly_detection/data/rsna/lookup_tables_metadata'
+pd.set_option('display.max_columns', None)
 
-OUTPUT_ROOT_DIR = '/content/drive/MyDrive/anomaly_detection/data/rsna/'
+
+LABELS_MAP_FILEPATH = '/vol/ep/mm/anomaly_detection/data/rsna/local/dir_001/stage_2_train.csv'
+OUTPUT_ROWDICT_FILEPATH = '/vol/ep/mm/anomaly_detection/data/rsna/local/dir_001/rowDict.pickle'
+DATA_ROOT_DIR_PATH = '/vol/ep/mm/anomaly_detection/data/rsna/local/dir_001/stage_2_train'
+
+PATIENT_TABLES_ROOT_DIR = '/vol/ep/mm/anomaly_detection/data/rsna/local/dir_001/patient_tables'
+DATASET_ROOT_PATH = '/vol/ep/mm/anomaly_detection/data/rsna/local/dir_001'
+DATASET_PATH = '/vol/ep/mm/anomaly_detection/data/rsna/local/dir_001/16-frame-data.csv'
+LOOKUP_TABLES_ROOT_DIR = '/vol/ep/mm/anomaly_detection/data/rsna/local/dir_001/lookup_tables_metadata'
+
+OUTPUT_ROOT_DIR = '/vol/ep/mm/anomaly_detection/data/rsna/local/dir_001'
+
+METADATA_ATTRIBUTES_NAMES = ['PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'ImagePositionPatient',
+                             'ImageOrientationPatient']
 
 #Create Metadata tables
 
@@ -36,6 +46,7 @@ def createDirLookupTable(child_dir_path, labels_map_file_path, rowDict, output_d
     df = read_csv(labels_map_file_path)
     lookupTable = pd.DataFrame(columns=df.columns)
     lookupTable['filepath'] = []
+    addMetadataColumns(lookupTable)
     lookupTable.dropna(inplace=True)
     print(f"{child_dir_path}: starting enumeration")
     for i, file in enumerate(os.scandir(child_dir_path)):
@@ -44,7 +55,7 @@ def createDirLookupTable(child_dir_path, labels_map_file_path, rowDict, output_d
             print(f"{child_dir_path.name}. KeyError: {filename} not in rowDict")
             continue
         row_indexes = rowDict[filename]
-        temp = df.loc[row_indexes].copy()
+        temp = df.loc[row_indexes].copy(deep=True)
         filepath = os.path.abspath(file)
         addMetadata(temp, filepath)
         lookupTable = lookupTable.append(temp, ignore_index=True)
@@ -52,12 +63,19 @@ def createDirLookupTable(child_dir_path, labels_map_file_path, rowDict, output_d
     print(f"createDirLookupTable: Done {child_dir_path}.")
 
 
+def addMetadataColumns(frame):
+    for name in METADATA_ATTRIBUTES_NAMES:
+        frame[name] = []
+
 def addMetadata(frame, filepath):
     dicom_file = dicom.dcmread(filepath)
     frame['filepath'] = filepath
-    metadata_attributes_names = ['PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'ImagePositionPatient', 'ImageOrientationPatient']
-    for name in metadata_attributes_names:
-        frame[name] = dicom_file[name].value
+    for name in METADATA_ATTRIBUTES_NAMES:
+        if name not in frame.columns:
+            frame[name] = ""
+        for i, row in frame.iterrows():
+            frame.at[i,name] = dicom_file[name].value
+
 
 
 def extractId(fullIdStr):
@@ -113,9 +131,9 @@ def runCreateLookupTables():
 # Save patient directories
 
 def getPatientFrames(dir_path):
-    metadata_paths = [path for path in os.scandir(dir_path)]
+    metadata_paths = [path for path in os.scandir(dir_path) if path.name.endswith('.csv')]
     frames = [read_csv(metadata_table_path) for metadata_table_path in metadata_paths]
-    full_metadata_frame = pd.concat(frames)
+    full_metadata_frame = pd.concat(frames, sort=False)
 
     patients_frames = [x.reset_index(drop=True).drop("Unnamed: 0", axis=1) for _, x in
                        full_metadata_frame.groupby(['PatientID'])]
@@ -123,17 +141,17 @@ def getPatientFrames(dir_path):
 
 def savePatientDirectory(patient_frame, output_dir):
     patient_id = patient_frame['PatientID'][0]
+    print(f"savePatientDirectory: Starting: {patient_id}")
+
     sorted = patient_frame.sort_values(by="ImagePositionPatient",
-                                       key=lambda positions: [ast.literal_eval(l)[2] for l in positions]).reset_index(
-        drop=True)
+                                       key=lambda positions: [ast.literal_eval(l)[2] for l in positions]).reset_index(drop=True)
     patient_dir_path = os.path.join(output_dir, patient_id)
     if Path(patient_dir_path).is_dir():
         print(f"{patient_dir_path} exists.")
         return
     os.mkdir(patient_dir_path)
 
-    series_frames = [x.reset_index(drop=True).drop("Unnamed: 0", axis=1) for _, x in
-                     sorted.groupby(['SeriesInstanceUID'])]
+    series_frames = [x.reset_index(drop=True) for _, x in sorted.groupby(['SeriesInstanceUID'])]
     for series_frame in series_frames:
         frame_filename = series_frame['SeriesInstanceUID'][0] + '.csv'
         frame_path = os.path.join(patient_dir_path, frame_filename)
@@ -144,7 +162,14 @@ def savePatientDirectory(patient_frame, output_dir):
     print(f"savePatientDirectories: done {patient_id}")
 
 def savePatientDirectories(patients_frames, output_dir):
+    if not Path(PATIENT_TABLES_ROOT_DIR).is_dir():
+        os.mkdir(PATIENT_TABLES_ROOT_DIR)
+    else:
+        print(f"{PATIENT_TABLES_ROOT_DIR} already exists.")
+
     args = [(patient_frame, output_dir) for patient_frame in patients_frames]
+    # for arg in args:
+    #     savePatientDirectory(*arg)
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         executor.map(lambda p: savePatientDirectory(*p), args)
 
@@ -156,7 +181,7 @@ def runSavePatientFrames():
 
 # Create table for n-frame dataset
 
-def createRow(table_frame_entry, n_frames):
+def createRow(table_frame_entry, n_frames, mode='middle'):
     print(f"Reading table frame: {table_frame_entry.path}")
     table_frame = read_csv(table_frame_entry.path)
     n_rows = len(table_frame.index)
@@ -164,8 +189,15 @@ def createRow(table_frame_entry, n_frames):
         print(f"{table_frame_entry.name}: Not enough rows. n_rows: {n_rows}, n_frames: {n_frames}./nExiting.")
         return None
     middle_row = n_rows // 2
-    start_row = middle_row - n_frames // 2
-    end_row = middle_row + ceil(n_frames / 2) - 1
+    if mode == 'middle':
+        start_row = middle_row - n_frames // 2
+        end_row = middle_row + ceil(n_frames / 2) - 1
+    elif mode == 'bottom':
+        start_row = middle_row - n_frames
+        end_row = middle_row - 1
+    elif mode == 'top':
+        start_row = middle_row
+        end_row = middle_row + n_frames - 1
     normal = (table_frame.loc[start_row:end_row, ['Label']] == 0).all().bool()
     label = 0 if normal else 1
     indices = [i for i in range(start_row, end_row + 1)]
@@ -173,11 +205,11 @@ def createRow(table_frame_entry, n_frames):
     return pd.Series({'path': table_frame_entry.path, 'label': label, 'indices': indices})
 
 
-def createPatientData(patient_dir_entry, n_frames):
+def createPatientData(patient_dir_entry, n_frames, mode = 'medium'):
     print(f"creating data for patient: {patient_dir_entry}")
     table_entries = [entry for entry in os.scandir(patient_dir_entry.path) if entry.name.endswith('.csv')]
     for i, table_entry in enumerate(table_entries):
-        row = createRow(table_entry, n_frames)
+        row = createRow(table_entry, n_frames, mode)
         if row is not None:
             return row  # create a single row for each patient
         elif i == len(table_entries) - 1:
@@ -186,11 +218,11 @@ def createPatientData(patient_dir_entry, n_frames):
     return None
 
 
-def createDataset(root_dir, n_frames, n_samples=10000):
+def createDataset(root_dir, n_frames, n_samples=10000, mode = 'medium'):
     print('Creating dataset')
     patient_dirs_entries = [path for path in os.scandir(root_dir) if path.is_dir()]
     n_samples = min(n_samples, len(patient_dirs_entries))
-    args = [(patient_dir_entry, n_frames) for patient_dir_entry in patient_dirs_entries[:n_samples]]
+    args = [(patient_dir_entry, n_frames, mode) for patient_dir_entry in patient_dirs_entries[:n_samples]]
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         rows = executor.map(lambda p: createPatientData(*p), args)
 
@@ -199,10 +231,9 @@ def createDataset(root_dir, n_frames, n_samples=10000):
     return pd.DataFrame(rows)
 
 
-def runCreateDataset():
-    n_frames = 8
-    dataset_frame = createDataset(PATIENT_TABLES_ROOT_DIR, n_frames, n_samples=10000)
-    dataset_frame.to_csv(DATASET_PATH)
+def runCreateDataset(dataset_path, n_frames = 8, mode = 'medium'):
+    dataset_frame = createDataset(PATIENT_TABLES_ROOT_DIR, n_frames, n_samples=10000, mode = mode)
+    dataset_frame.to_csv(dataset_path)
 
 
 # Create frames for datasets
@@ -221,14 +252,47 @@ def createBalancedClassFrame(dataset_frame, n_samples, start_normal=0, start_ano
     return frame
 
 
-def createFramesForDatasets(dataset_path, n_datasets, output_name):
+def createFramesForDatasets(dataset_path, n_datasets=5, n_train_samples=1000, n_test_samples=200, output_name='data'):
     dataset_frame = read_csv(dataset_path)
+    # train_frame_dummy = createOneClassFrame(dataset_frame, 10, 1000)
+    # test_frame_dummy = createBalancedClassFrame(dataset_frame, 10, 0, 0)
+    # train_frame_dummy.to_csv(os.path.join(OUTPUT_ROOT_DIR, '16-frame-data-train-dummy.csv'), index=False)
+    # test_frame_dummy.to_csv(os.path.join(OUTPUT_ROOT_DIR, '16-frame-data-test-dummy.csv'), index=False)
+    paths = []
     for i in range(n_datasets):
-        train_frame_filename = '-'.join(output_name, 'train', str(i))
-        val_frame_filename = '-'.join(output_name, 'val', str(i))
-        test_frame_filename = '-'.join(output_name, 'test', str(i))
+        train_start = n_test_samples * n_datasets + n_train_samples * i
+        train_end = train_start + n_train_samples - 1
+        train_frame = createOneClassFrame(dataset_frame, n_train_samples, train_start)
+        train_name = '-'.join([output_name, 'train', str(train_start), str(train_end)]) + '.csv'
+        train_path = os.path.join(OUTPUT_ROOT_DIR, train_name)
+        train_frame.to_csv(train_path, index=False)
+        print(f'done {train_name}')
 
-    train_frame_a = createOneClassFrame(dataset_frame, 1000, 5000)
+        test_start = i*n_test_samples//2
+        test_end = test_start + n_test_samples//2
+        test_frame = createBalancedClassFrame(dataset_frame, n_test_samples, test_start, test_start)
+        test_name = '-'.join([output_name, 'test', str(test_start), str(test_end)]) + '.csv'
+        test_path = os.path.join(OUTPUT_ROOT_DIR, test_name)
+        test_frame.to_csv(test_path, index=False)
+        print(f'done {test_name}')
+
+        val_start = n_test_samples//2*n_datasets + i*n_test_samples//2
+        val_end = val_start + n_test_samples//2
+        val_frame = createBalancedClassFrame(dataset_frame, n_test_samples, val_start, val_start)
+        val_name = '-'.join([output_name, 'val', str(val_start), str(val_end)]) + '.csv'
+        val_path = os.path.join(OUTPUT_ROOT_DIR, val_name)
+        val_frame.to_csv(val_path, index=False)
+
+        paths.append(train_path)
+        paths.append(test_path)
+        paths.append(val_path)
+        print(f'done {val_name}')
+
+
+
+
+
+    # train_frame_a = createOneClassFrame(dataset_frame, 1000, 5000)
     # train_frame_b = createOneClassFrame(dataset_frame, 1000, 1000)
     # train_frame_c = createOneClassFrame(dataset_frame, 1000, 2000)
     # train_frame_d = createOneClassFrame(dataset_frame, 1000, 3000)
@@ -238,19 +302,31 @@ def createFramesForDatasets(dataset_path, n_datasets, output_name):
     # test_frame_c = createBalancedClassFrame(dataset_frame, 200,200,200)
     # test_frame_d = createBalancedClassFrame(dataset_frame, 200,300,300)
     # test_frame_e = createBalancedClassFrame(dataset_frame, 200,400,400)
-
-    train_frame_a.to_csv('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-train-a.csv', index=False)
-    # train_frame_b.to_csv('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-train-b.csv', index=False)
-    # train_frame_c.to_csv('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-train-c.csv', index=False)
-    # train_frame_d.to_csv('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-train-d.csv', index=False)
-    # train_frame_e.to_csv('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-train-e.csv', index=False)
-
-    # test_frame_a.to_csv('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-test-a.csv', index=False)
-    # test_frame_b.to_csv('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-test-b.csv', index=False)
-    # test_frame_c.to_csv('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-test-c.csv', index=False)
-    # test_frame_d.to_csv('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-test-d.csv', index=False)
-    # test_frame_e.to_csv('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-test-e.csv', index=False)
+    # val_frame_a = createBalancedClassFrame(dataset_frame, 200,500,500)
+    # val_frame_b = createBalancedClassFrame(dataset_frame, 200,600,600)
+    # val_frame_c = createBalancedClassFrame(dataset_frame, 200,700,700)
+    # val_frame_d = createBalancedClassFrame(dataset_frame, 200,800,800)
+    # val_frame_e = createBalancedClassFrame(dataset_frame, 200,900,900)
+    #
+    # train_frame_a.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-1.csv'), index=False)
+    # train_frame_b.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-2.csv'), index=False)
+    # train_frame_c.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-3.csv'), index=False)
+    # train_frame_d.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-4.csv'), index=False)
+    # train_frame_e.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-5.csv'), index=False)
+    #
+    # test_frame_a.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-1.csv'), index=False)
+    # test_frame_b.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-2.csv'), index=False)
+    # test_frame_c.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-3.csv'), index=False)
+    # test_frame_d.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-4.csv'), index=False)
+    # test_frame_e.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-5.csv'), index=False)
+    #
+    # val_frame_a.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-1.csv'), index=False)
+    # val_frame_b.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-2.csv'), index=False)
+    # val_frame_c.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-3.csv'), index=False)
+    # val_frame_d.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-4.csv'), index=False)
+    # val_frame_e.to_csv(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-5.csv'), index=False)
     print('done.')
+    return paths
 
 
 
@@ -267,26 +343,83 @@ def window_image(pixel_array, window_center, window_width, is_normalize=True):
     return image
 
 
-def normalize_dicom(dicom):
-    if (dicom.BitsStored == 12) and (dicom.PixelRepresentation == 0) and (int(dicom.RescaleIntercept) > -100):
-        # see: https://www.kaggle.com/jhoward/cleaning-the-data-for-rapid-prototyping-fastai
-        p = dicom.pixel_array + 1000
-        p[p >= 4096] = p[p >= 4096] - 4096
-        dicom.PixelData = p.tobytes()
-        dicom.RescaleIntercept = -1000
+def fill_mask(mask):
+    seed = np.ones_like(mask)
+    h,w  = seed.shape
+    seed[0,0] = 0 if not mask[0,0] else 1
+    seed[h-1,0] = 0 if not mask[h-1,0] else 1
+    seed[h-1,w-1] = 0 if not mask[h-1,w-1] else 1
+    seed[0,w-1] = 0 if not mask[0,w-1] else 1
 
-    pixel_array = dicom.pixel_array * dicom.RescaleSlope + dicom.RescaleIntercept
+    filled  = reconstruction(seed, mask.copy(), method='erosion')
+
+    return filled
+
+
+def get_largest_connected_components(image, n_components=1):
+    labels, num_of_cc = measure.label(image, connectivity=2, return_num=True)
+
+    background_label = labels[0, 0]
+
+    unique, counts = np.unique(labels, return_counts=True)
+    mask = unique != background_label
+    counts = counts[mask]
+    unique = unique[mask]
+    sorted_indices = np.argsort(counts)
+    largest_component_values = unique[sorted_indices[-n_components:]]
+
+    single_component_data_mask = np.isin(labels, largest_component_values)
+    single_component_data = np.zeros_like(image)
+    single_component_data[single_component_data_mask] = 1
+
+    return single_component_data
+
+
+def get_mask(pixel_array):
+    DICOM_THRESHOLD = -10
+    MASK_THRESHOLD = 0.2
+
+    image = np.array(pixel_array > DICOM_THRESHOLD, dtype = np.float64)
+
+    image = (image - np.min(image)) / (np.max(image) - np.min(image))
+
+    image = filters.gaussian(image, sigma=0.2)
+
+    image = image > MASK_THRESHOLD
+
+    largest_component_mask = get_largest_connected_components(image)
+
+    mask = binary_dilation(largest_component_mask, disk(10))
+
+    return fill_mask(mask)
+
+
+def normalize_dicom(dicom_image, mask_flag):
+    if (dicom_image.BitsStored == 12) and (dicom_image.PixelRepresentation == 0) and (int(dicom_image.RescaleIntercept) > -100):
+        # see: https://www.kaggle.com/jhoward/cleaning-the-data-for-rapid-prototyping-fastai
+        p = dicom_image.pixel_array + 1000
+        p[p >= 4096] = p[p >= 4096] - 4096
+        dicom_image.PixelData = p.tobytes()
+        dicom_image.RescaleIntercept = -1000
+
+    pixel_array = dicom_image.pixel_array * dicom_image.RescaleSlope + dicom_image.RescaleIntercept
     brain = window_image(pixel_array, 40, 80)
     subdural = window_image(pixel_array, 80, 200)
     soft_tissue = window_image(pixel_array, 40, 380)
 
     image_array = np.dstack([soft_tissue, subdural, brain])
     image_array = (image_array * 255).astype(np.uint8)
+
+    if mask_flag:
+        mask = get_mask(pixel_array)
+        mask = np.dstack([mask, mask, mask])
+        image_array = np.where(mask > 0, image_array, 0)
+
     image = Image.fromarray(image_array)
     return image
 
 
-def saveImages(item_table_path, indices, output_dir_row, convert_to_png):
+def saveImages(item_table_path, indices, output_dir_row, convert_to_png, mask_flag):
     if not Path(output_dir_row).is_dir():
         print(f"making dir {output_dir_row}")
         os.mkdir(output_dir_row)
@@ -300,6 +433,7 @@ def saveImages(item_table_path, indices, output_dir_row, convert_to_png):
             output_path = os.path.join(output_dir_row, filename + '.dcm')
         if Path(output_path).is_file():
             print(f'{output_path}: already exists.')
+            samples_output_paths.append(output_path)
             continue
         else:
             print(f'{output_path}: processing.')
@@ -308,15 +442,16 @@ def saveImages(item_table_path, indices, output_dir_row, convert_to_png):
         dicom_image = dicom.dcmread(img_path)
 
         if convert_to_png:
-            normalized_image = normalize_dicom(dicom_image)
+            normalized_image = normalize_dicom(dicom_image, mask_flag)
             normalized_image.save(output_path)
         else:
             dicom_image.save_as(output_path)
+
         samples_output_paths.append(output_path)
     return samples_output_paths
 
 
-def saveRow(input_frame, row_idx, output_dir_path, convert_to_png):
+def saveRow(input_frame, row_idx, output_dir_path, convert_to_png, mask_flag):
     output_frame = pd.DataFrame(columns=['ID', 'label', 'filepaths'])
     csv_filepath = input_frame.at[row_idx, 'path']
     label = input_frame.at[row_idx, 'label']
@@ -325,11 +460,11 @@ def saveRow(input_frame, row_idx, output_dir_path, convert_to_png):
     output_frame.at[row_idx, 'label'] = label
     output_dir_row = os.path.join(output_dir_path, os.path.splitext(row_basename)[0])
     indices = ast.literal_eval(input_frame.loc[row_idx, 'indices'])
-    output_frame.at[row_idx, 'filepaths'] = saveImages(csv_filepath, indices, output_dir_row, convert_to_png)
+    output_frame.at[row_idx, 'filepaths'] = saveImages(csv_filepath, indices, output_dir_row, convert_to_png, mask_flag)
     return output_frame
 
 
-def saveDataset(table_path, output_dir_name=None, convert_to_png=True, start=0, n_samples=1000):
+def saveDataset(table_path, output_dir_name=None, convert_to_png=True, mask_flag = True, start=0, n_samples=1000):
     dataset_frame = read_csv(table_path)
     root_dir, table_basename = os.path.split(table_path)
     print(f"saving from table {table_basename}, samples: {start}-{start + n_samples}")
@@ -350,7 +485,7 @@ def saveDataset(table_path, output_dir_name=None, convert_to_png=True, start=0, 
 
     # each row in dataset_frame is a new sample
 
-    # args = [(dataset_frame,i,output_dir_path, convert_to_png) for i, _ in islice(dataset_frame.iterrows(), start, end)]
+    # args = [(dataset_frame,i,output_dir_path, convert_to_png, mask_flag) for i, _ in islice(dataset_frame.iterrows(), start, end)]
     # with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
     #       results = executor.map(lambda p: saveRow(*p), args)
     #       samples_frame = pd.concat([frame for frame in results], ignore_index=True)
@@ -366,16 +501,170 @@ def saveDataset(table_path, output_dir_name=None, convert_to_png=True, start=0, 
         samples_frame.at[i, 'label'] = label
         output_dir_row = os.path.join(output_dir_path, os.path.splitext(row_basename)[0])
         indices = ast.literal_eval(dataset_frame.loc[i, 'indices'])
-        samples_frame.at[i, 'filepaths'] = saveImages(csv_filepath, indices, output_dir_row, convert_to_png)
+        samples_frame.at[i, 'filepaths'] = saveImages(csv_filepath, indices, output_dir_row, convert_to_png, mask_flag)
 
     samples_frame.to_csv(os.path.join(output_dir_path, 'lookup_table.csv'))
 
     print(f'done saving to {output_dir_name}')
 
 
-def saveDatasets():
-    saveDataset('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-train-a.csv',
-                '8-frame-data-train-a-dcm', False) # saving as dicom files
+def saveDatasets(table_paths):
+    for path in table_paths:
+        head, tail = os.path.split(path)
+        table_name = tail.split('.')[0]
+        saveDataset(path, '-'.join([table_name, 'dcm']), False)  # saving as dicom files
+        saveDataset(path, '-'.join([table_name, 'clean']), True)  # saving as png files
 
-    saveDataset('/content/drive/MyDrive/anomaly_detection/data/rsna/8-frame-data-train-a.csv',
-                '8-frame-data-train-a', True)  # saving as png files
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '16-frame-data-train-dummy.csv'),
+    #             '16-frame-data-train-dummy-dcm', False) # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '16-frame-data-train-dummy.csv'),
+    #             '16-frame-data-train-dummy-clean', True)  # saving as png files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '16-frame-data-test-dummy.csv'),
+    #             '16-frame-data-test-dummy-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '16-frame-data-test-dummy.csv'),
+    #             '16-frame-data-test-dummy-clean', True)  # saving as png files
+
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-1.csv'),
+    #             '8-frame-data-train-1-dcm', False) # saving as dicom files
+
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-1.csv'),
+    #             '8-frame-data-train-1-clean', True)  # saving as png files
+
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-1.csv'),
+    #             '8-frame-data-test-1-dcm', False)  # saving as dicom files
+
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-1.csv'),
+    #             '8-frame-data-test-1-clean', True)  # saving as png files
+
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-1.csv'),
+    #             '8-frame-data-val-1-dcm', False)  # saving as dicom files
+
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-1.csv'),
+    #             '8-frame-data-val-1-clean', True)  # saving as png files
+
+    #######
+
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-2.csv'),
+    #             '8-frame-data-train-2-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-2.csv'),
+    #             '8-frame-data-train-2-clean', True)  # saving as png files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-2.csv'),
+    #             '8-frame-data-test-2-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-2.csv'),
+    #             '8-frame-data-test-2-clean', True)  # saving as png files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-2.csv'),
+    #             '8-frame-data-val-2-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-2.csv'),
+    #             '8-frame-data-val-2-clean', True)  # saving as png files
+
+    #######
+
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-3.csv'),
+    #             '8-frame-data-train-3-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-3.csv'),
+    #             '8-frame-data-train-3-clean', True)  # saving as png files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-3.csv'),
+    #             '8-frame-data-test-3-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-3.csv'),
+    #             '8-frame-data-test-3-clean', True)  # saving as png files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-3.csv'),
+    #             '8-frame-data-val-3-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-3.csv'),
+    #             '8-frame-data-val-3-clean', True)  # saving as png files
+    #
+    # ######
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-4.csv'),
+    #             '8-frame-data-train-4-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-4.csv'),
+    #             '8-frame-data-train-4-clean', True)  # saving as png files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-4.csv'),
+    #             '8-frame-data-test-4-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-4.csv'),
+    #             '8-frame-data-test-4-clean', True)  # saving as png files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-4.csv'),
+    #             '8-frame-data-val-4-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-4.csv'),
+    #             '8-frame-data-val-4-clean', True)  # saving as png files
+    #
+    # #####
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-5.csv'),
+    #             '8-frame-data-train-5-dcm', False)  # saving as dicom files
+    # #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-train-5.csv'),
+    #             '8-frame-data-train-5-clean', True)  # saving as png files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-5.csv'),
+    #             '8-frame-data-test-5-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-test-5.csv'),
+    #             '8-frame-data-test-5-clean', True)  # saving as png files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-5.csv'),
+    #             '8-frame-data-val-5-dcm', False)  # saving as dicom files
+    #
+    # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '8-frame-data-val-5.csv'),
+    #             '8-frame-data-val-5-clean', True)  # saving as png files
+
+
+def test_mask(filepath):
+    dicom_image = dicom.dcmread(filepath)
+    if (dicom_image.BitsStored == 12) and (dicom_image.PixelRepresentation == 0) and (
+            int(dicom_image.RescaleIntercept) > -100):
+        # see: https://www.kaggle.com/jhoward/cleaning-the-data-for-rapid-prototyping-fastai
+        p = dicom_image.pixel_array + 1000
+        p[p >= 4096] = p[p >= 4096] - 4096
+        dicom_image.PixelData = p.tobytes()
+        dicom_image.RescaleIntercept = -1000
+
+    pixel_array = dicom_image.pixel_array * dicom_image.RescaleSlope + dicom_image.RescaleIntercept
+
+    soft_tissue = window_image(pixel_array, 40, 380)
+
+    image_array = (soft_tissue * 255).astype(np.uint8)
+    image = Image.fromarray(image_array)
+
+    mask = get_mask(pixel_array)
+
+    masked_image = np.where(mask>0, image, 0)
+
+
+    fig = plt.figure(figsize=(8, 4))
+    fig.add_subplot(1, 3, 1)
+    plt.imshow(image, cmap=plt.cm.gray)
+
+    fig.add_subplot(1, 3, 2)
+    plt.imshow(mask, cmap=plt.cm.gray)
+
+    fig.add_subplot(1, 3, 3)
+    plt.imshow(masked_image, cmap=plt.cm.gray)
+
+    plt.show()
+
+
+if __name__ == "__main__":
+    # runCreateLookupTables()
+    # runSavePatientFrames()
+    dataset_path = os.path.join(DATASET_ROOT_PATH, '8-frame-top-data.csv')
+    runCreateDataset(dataset_path, mode='top')
+    paths = createFramesForDatasets(dataset_path, output_name='8-frame-top-data')
+    saveDatasets(paths)

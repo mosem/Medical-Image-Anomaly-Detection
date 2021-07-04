@@ -40,8 +40,9 @@ def normalize_dicom(dicom):
 
 class RsnaDataset3D(torch.utils.data.Dataset):
 
-    def __init__(self, lookup_table_file_path, transform):
-        self.lookup_table = read_csv(lookup_table_file_path, index_col=[0])
+    def __init__(self, lookup_table_file_paths, transform):
+        frames = [read_csv(path, index_col=[0]) for path in lookup_table_file_paths]
+        self.lookup_table = pd.concat(frames, sort=False, ignore_index=True)
         self.transform = transform
         self.targets = self.lookup_table['label'].to_numpy()
         self.ids = self.lookup_table['ID'].to_numpy()
@@ -173,7 +174,7 @@ def get_loaders(lookup_tables_paths, batch_size):
 
 
 def get_loaders3D(lookup_tables_paths, batch_size):
-    train_lookup_tables_path, test_lookup_tables_path = lookup_tables_paths
+    train_lookup_tables_paths, test_lookup_tables_paths = lookup_tables_paths
 
     train_transform = transforms.Compose([transforms.Resize(256),
                                           transforms.CenterCrop(224),
@@ -184,14 +185,13 @@ def get_loaders3D(lookup_tables_paths, batch_size):
                                          transforms.ToTensor()])
 
     # train_transform = transforms.Compose([transforms.CenterCrop(448),
-    #                                       transforms.RandomHorizontalFlip(),
     #                                       transforms.ToTensor()])
     #
     # test_transform = transforms.Compose([transforms.CenterCrop(448),
     #                                      transforms.ToTensor()])
 
-    train_dataset = RsnaDataset3D(train_lookup_tables_path, train_transform)
-    test_dataset = RsnaDataset3D(test_lookup_tables_path, test_transform)
+    train_dataset = RsnaDataset3D(train_lookup_tables_paths, train_transform)
+    test_dataset = RsnaDataset3D(test_lookup_tables_paths, test_transform)
 
     shuffled_train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size,
                                                    shuffle=True, num_workers=2, drop_last=False)
