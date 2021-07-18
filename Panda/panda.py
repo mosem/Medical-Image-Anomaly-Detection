@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 from ResNet import ResNet3D
+from TimeSformerUtils import TimeSformerWrapper
 from losses import CompactnessLoss, EWCLoss
 import utils
 from copy import deepcopy
@@ -16,7 +17,7 @@ import pandas as pd
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-N_SLICES = 8
+N_SLICES = 16
 
 def train_model(model, sorted_train_loader, shuffled_train_loader, test_loader, device, args, ewc_loss):
     model.eval()
@@ -97,6 +98,35 @@ def save_results(results_per_sample, results_per_epoch, results_dir_path, args):
     #                               test_lookup_table_paths)
 
 
+def get_features(images, model):
+    if type(model) is ResNet3D:
+        _, features = model(images)
+    elif type(model) is TimeSformerWrapper and model.mode == 'standard':
+        _, features_bottom = model(images[:, :, :8, ...])
+        _, features_top = model(images[:, :, 8:, ...])
+        features = torch.cat([features_bottom, features_top], dim=-1)
+    else:
+        print("get_features: no model found")
+    return features
+
+
+def get_features_as_numpy(images, model):
+    if type(model) is ResNet3D:
+        _, features = model(images)
+        batch_size, n_slices = features.size()[:2]
+        features = features.view(batch_size * n_slices, -1).contiguous().cpu().numpy()
+    elif type(model) is TimeSformerWrapper and model.mode == 'standard':
+        _, features_bottom = model(images[:, :, :8, ...])
+        features_bottom = features_bottom.contiguous().cpu().numpy()
+        _, features_top = model(images[:, :, 8:, ...])
+        features_top = features_top.contiguous().cpu().numpy()
+        features = np.concatenate([features_bottom, features_top], axis=-1)
+    else:
+        print("get_features: no model found")
+    return features
+
+
+
 def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
     running_loss = 0.0
     for i, (imgs, _) in enumerate(train_loader):
@@ -105,7 +135,7 @@ def run_epoch(model, train_loader, optimizer, criterion, device, ewc, ewc_loss):
 
         optimizer.zero_grad()
 
-        _, features = model(images)
+        features = get_features(images, model)
 
         loss = criterion(features)
 
@@ -177,27 +207,14 @@ def get_results_per_sample(test_loader, summed_distances, nearest_neighbors_resu
 
 def get_train_feature_space(model, device, train_loader):
     train_feature_space = []
-    print(f"get_train_feature_space: iterating on features!!!")
     with torch.no_grad():
         i = 0
         for imgs, _ in tqdm(train_loader, desc='Train set feature extracting'):
             i+=1
             imgs = imgs.to(device)
-            _, features = model(imgs)
-            # print(f"{i}: appending features...")
-            if (len(features.size()) == 3):
-                # print(f"{i}: length==3.")
-                batch_size, n_slices = features.size()[:2]
-                two_d_features = features.view(batch_size * n_slices, -1)
-                train_feature_space.append(two_d_features.contiguous().cpu().numpy())
-            else:
-                # print(f"{i}: length==2.")
-                train_feature_space.append(features.contiguous().cpu().numpy())
-        # print(f"get_train_feature_space: concataneting features")
-        # train_feature_space = torch.cat(train_feature_space, dim=0)
-        #
+            features = get_features_as_numpy(imgs, model)
+            train_feature_space.append(features)
         train_feature_space = np.concatenate(train_feature_space, axis=0)
-    print(f"get_train_feature_space: done.")
     return train_feature_space
 
 
@@ -206,13 +223,8 @@ def get_test_feature_space(model, device, test_loader):
     with torch.no_grad():
         for (imgs, _) in tqdm(test_loader, desc='Test set feature extracting'):
             imgs = imgs.to(device)
-            _, features = model(imgs)
-            if (len(features.size()) == 3):
-                batch_size, n_slices = features.size()[:2]
-                two_d_features = features.view(batch_size * n_slices, -1)
-                test_feature_space.append(two_d_features.contiguous().cpu().numpy())
-            else:
-                test_feature_space.append(features.contiguous().cpu().numpy())
+            features = get_features_as_numpy(imgs, model)
+            test_feature_space.append(features)
         test_feature_space = np.concatenate(test_feature_space, axis=0)
     return test_feature_space
 
@@ -244,35 +256,35 @@ def get_test_losses(model, test_feature_space, test_labels, criterion, device, e
 
 def get_score(model, device, train_loader, test_loader, test_feature_space, args, epoch, criterion=None):
     train_feature_space = get_train_feature_space(model, device, train_loader)
-    print('get_score: got train feature space')
+    # print('get_score: got train feature space')
     test_labels = test_loader.dataset.targets
 
     raw_distances, indices = utils.knn_score(train_feature_space, test_feature_space, n_neighbours=args.n_neighbours)
     summed_distances = np.sum(raw_distances, axis=1)
     is_3d_data = type(model) is ResNet3D
-    print(f'get_score: is 3d data: {is_3d_data}')
+    # print(f'get_score: is 3d data: {is_3d_data}')
     if is_3d_data:
         summed_distances = np.array(list(map(min, np.split(summed_distances, len(test_labels))))) # MIN from each set of slices
         indices = np.array(list(map(lambda idx_list: [(i // N_SLICES, i % N_SLICES) for i in idx_list], indices)))
         indices = np.split(indices, len(test_labels))
         raw_distances = np.split(raw_distances, len(test_labels))
 
-    print('get_score: plotting results.')
+    # print('get_score: plotting results.')
     utils.plot_features(train_feature_space, test_feature_space, test_labels, get_results_dir_path(args), epoch)
 
     if args.epochs-1 == epoch or args.epochs == 0:
-        print('get_score: getting nearest neighbours results')
+        # print('get_score: getting nearest neighbours results')
         nearest_neighbours_results = get_nearest_neighbours_results(train_loader, raw_distances, indices, is_3d_data)
         if criterion is None:
             criterion = get_criterion(train_feature_space, device)
-        print('get_score: getting loss results')
+        # print('get_score: getting loss results')
         loss_results = get_loss_results(test_feature_space, criterion, device, is_3d_data)
-        print('get_score: getting results per sample')
+        # print('get_score: getting results per sample')
         results = get_results_per_sample(test_loader, summed_distances, nearest_neighbours_results, loss_results)
     else:
         results = None
 
-    print('get_score: getting roc score.')
+    # print('get_score: getting roc score.')
     auc = roc_auc_score(test_labels, summed_distances)
 
     return auc, train_feature_space, results
