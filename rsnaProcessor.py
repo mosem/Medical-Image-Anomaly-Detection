@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 import pandas as pd
 from pandas import read_csv
@@ -117,15 +118,15 @@ def createLookupTables(root_dir_path, labels_map_file_path, rowDict_file_path, o
     print("createLookupTable: Done.")
 
 
-def runCreateLookupTables():
+def runCreateLookupTables(data_root_dir_path =DATA_ROOT_DIR_PATH,labels_map_filepath = LABELS_MAP_FILEPATH, output_rowdict_filepath = OUTPUT_ROWDICT_FILEPATH, lookup_tables_root_dir = LOOKUP_TABLES_ROOT_DIR):
 
-    if not Path(OUTPUT_ROWDICT_FILEPATH).is_file():
-        createAndSaveRowDict(LABELS_MAP_FILEPATH, OUTPUT_ROWDICT_FILEPATH)
+    if not Path(output_rowdict_filepath).is_file():
+        createAndSaveRowDict(labels_map_filepath, output_rowdict_filepath)
 
-    if not Path(LOOKUP_TABLES_ROOT_DIR).is_dir():
-        os.mkdir(LOOKUP_TABLES_ROOT_DIR)
+    if not Path(lookup_tables_root_dir).is_dir():
+        os.mkdir(lookup_tables_root_dir)
 
-    createLookupTables(DATA_ROOT_DIR_PATH, LABELS_MAP_FILEPATH, OUTPUT_ROWDICT_FILEPATH, LOOKUP_TABLES_ROOT_DIR)
+    createLookupTables(data_root_dir_path, labels_map_filepath, output_rowdict_filepath, lookup_tables_root_dir)
 
 
 # Save patient directories
@@ -162,10 +163,10 @@ def savePatientDirectory(patient_frame, output_dir):
     print(f"savePatientDirectories: done {patient_id}")
 
 def savePatientDirectories(patients_frames, output_dir):
-    if not Path(PATIENT_TABLES_ROOT_DIR).is_dir():
-        os.mkdir(PATIENT_TABLES_ROOT_DIR)
+    if not Path(output_dir).is_dir():
+        os.mkdir(output_dir)
     else:
-        print(f"{PATIENT_TABLES_ROOT_DIR} already exists.")
+        print(f"{output_dir} already exists.")
 
     args = [(patient_frame, output_dir) for patient_frame in patients_frames]
     # for arg in args:
@@ -174,9 +175,9 @@ def savePatientDirectories(patients_frames, output_dir):
         executor.map(lambda p: savePatientDirectory(*p), args)
 
 
-def runSavePatientFrames():
-    patient_frames = getPatientFrames(LOOKUP_TABLES_ROOT_DIR)
-    savePatientDirectories(patient_frames, PATIENT_TABLES_ROOT_DIR)
+def runSavePatientFrames(lookup_tables_root_dir=LOOKUP_TABLES_ROOT_DIR, patient_tables_root_dir=PATIENT_TABLES_ROOT_DIR):
+    patient_frames = getPatientFrames(lookup_tables_root_dir)
+    savePatientDirectories(patient_frames, patient_tables_root_dir)
 
 
 # Create table for n-frame dataset
@@ -205,7 +206,7 @@ def createRow(table_frame_entry, n_frames, mode='middle'):
     return pd.Series({'path': table_frame_entry.path, 'label': label, 'indices': indices})
 
 
-def createPatientData(patient_dir_entry, n_frames, mode = 'medium'):
+def createPatientData(patient_dir_entry, n_frames, mode = 'middle'):
     print(f"creating data for patient: {patient_dir_entry}")
     table_entries = [entry for entry in os.scandir(patient_dir_entry.path) if entry.name.endswith('.csv')]
     for i, table_entry in enumerate(table_entries):
@@ -218,7 +219,7 @@ def createPatientData(patient_dir_entry, n_frames, mode = 'medium'):
     return None
 
 
-def createDataset(root_dir, n_frames, n_samples=10000, mode = 'medium'):
+def createDataset(root_dir, n_frames, n_samples=10000, mode = 'middle'):
     print('Creating dataset')
     patient_dirs_entries = [path for path in os.scandir(root_dir) if path.is_dir()]
     n_samples = min(n_samples, len(patient_dirs_entries))
@@ -231,8 +232,8 @@ def createDataset(root_dir, n_frames, n_samples=10000, mode = 'medium'):
     return pd.DataFrame(rows)
 
 
-def runCreateDataset(dataset_path, n_frames = 8, mode = 'medium'):
-    dataset_frame = createDataset(PATIENT_TABLES_ROOT_DIR, n_frames, n_samples=10000, mode = mode)
+def runCreateDataset(dataset_path, n_frames = 8, mode = 'middle', patient_tables_root_dir = PATIENT_TABLES_ROOT_DIR):
+    dataset_frame = createDataset(patient_tables_root_dir, n_frames, n_samples=10000, mode = mode)
     dataset_frame.to_csv(dataset_path)
 
 
@@ -252,7 +253,7 @@ def createBalancedClassFrame(dataset_frame, n_samples, start_normal=0, start_ano
     return frame
 
 
-def createFramesForDatasets(dataset_path, n_datasets=5, n_train_samples=1000, n_test_samples=200, output_name='data'):
+def createFramesForDatasets(dataset_path, n_datasets=5, n_train_samples=1000, n_test_samples=200, output_name='data',output_root_dir=OUTPUT_ROOT_DIR):
     dataset_frame = read_csv(dataset_path)
     # train_frame_dummy = createOneClassFrame(dataset_frame, 10, 1000)
     # test_frame_dummy = createBalancedClassFrame(dataset_frame, 10, 0, 0)
@@ -264,7 +265,7 @@ def createFramesForDatasets(dataset_path, n_datasets=5, n_train_samples=1000, n_
         train_end = train_start + n_train_samples - 1
         train_frame = createOneClassFrame(dataset_frame, n_train_samples, train_start)
         train_name = '-'.join([output_name, 'train', str(train_start), str(train_end)]) + '.csv'
-        train_path = os.path.join(OUTPUT_ROOT_DIR, train_name)
+        train_path = os.path.join(output_root_dir, train_name)
         train_frame.to_csv(train_path, index=False)
         print(f'done {train_name}')
 
@@ -272,7 +273,7 @@ def createFramesForDatasets(dataset_path, n_datasets=5, n_train_samples=1000, n_
         test_end = test_start + n_test_samples//2
         test_frame = createBalancedClassFrame(dataset_frame, n_test_samples, test_start, test_start)
         test_name = '-'.join([output_name, 'test', str(test_start), str(test_end)]) + '.csv'
-        test_path = os.path.join(OUTPUT_ROOT_DIR, test_name)
+        test_path = os.path.join(output_root_dir, test_name)
         test_frame.to_csv(test_path, index=False)
         print(f'done {test_name}')
 
@@ -280,7 +281,7 @@ def createFramesForDatasets(dataset_path, n_datasets=5, n_train_samples=1000, n_
         val_end = val_start + n_test_samples//2
         val_frame = createBalancedClassFrame(dataset_frame, n_test_samples, val_start, val_start)
         val_name = '-'.join([output_name, 'val', str(val_start), str(val_end)]) + '.csv'
-        val_path = os.path.join(OUTPUT_ROOT_DIR, val_name)
+        val_path = os.path.join(output_root_dir, val_name)
         val_frame.to_csv(val_path, index=False)
 
         paths.append(train_path)
@@ -662,9 +663,27 @@ def test_mask(filepath):
 
 
 if __name__ == "__main__":
-    # runCreateLookupTables()
-    # runSavePatientFrames()
-    dataset_path = os.path.join(DATASET_ROOT_PATH, '8-frame-top-data.csv')
-    runCreateDataset(dataset_path, mode='top')
-    paths = createFramesForDatasets(dataset_path, output_name='8-frame-top-data')
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('--data_root_dir_path', default=DATA_ROOT_DIR_PATH)
+    parser.add_argument('--labels_map_filepath', default=LABELS_MAP_FILEPATH)
+    parser.add_argument('--output_rowdict_filepath', default=OUTPUT_ROWDICT_FILEPATH)
+    parser.add_argument('--lookup_tables_root_dir', default=LOOKUP_TABLES_ROOT_DIR)
+    parser.add_argument('--patient_tables_root_dir', default=PATIENT_TABLES_ROOT_DIR)
+    parser.add_argument('--dataset_root_path', default=DATASET_ROOT_PATH)
+    parser.add_argument('--output_root_dir', default=OUTPUT_ROOT_DIR)
+    parser.add_argument('--n_frames', default=16, type=int)
+    parser.add_argument('--mode', default='middle')
+
+    args = parser.parse_args()
+
+    runCreateLookupTables(data_root_dir_path=args.data_root_dir_path, labels_map_filepath=args.labels_map_filepath,
+                          output_rowdict_filepath=args.output_rowdict_filepath, lookup_tables_root_dir=args.lookup_tables_root_dir)
+    runSavePatientFrames(lookup_tables_root_dir=args.lookup_tables_root_dir, patient_tables_root_dir=args.patient_tables_root_dir)
+
+    dataset_name = f'{args.n_frames}-frame-{args.mode}-data'
+    dataset_path = os.path.join(DATASET_ROOT_PATH, dataset_name+'.csv')
+    runCreateDataset(dataset_path, n_frames=args.n_frames, mode=args.mode,
+                     patient_tables_root_dir=args.patient_tables_root_dir)
+    paths = createFramesForDatasets(dataset_path, n_datasets=5, n_train_samples=1000, n_test_samples=200,
+                                    output_name=dataset_name, output_root_dir=args.output_root_dir)
     saveDatasets(paths)

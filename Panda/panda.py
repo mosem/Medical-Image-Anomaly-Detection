@@ -177,19 +177,27 @@ def get_results_per_sample(test_loader, summed_distances, nearest_neighbors_resu
 
 def get_train_feature_space(model, device, train_loader):
     train_feature_space = []
-    print(f"get_train_feature_space: iterating on features")
+    print(f"get_train_feature_space: iterating on features!!!")
     with torch.no_grad():
-        for (imgs, _) in tqdm(train_loader, desc='Train set feature extracting'):
+        i = 0
+        for imgs, _ in tqdm(train_loader, desc='Train set feature extracting'):
+            i+=1
             imgs = imgs.to(device)
             _, features = model(imgs)
+            # print(f"{i}: appending features...")
             if (len(features.size()) == 3):
+                # print(f"{i}: length==3.")
                 batch_size, n_slices = features.size()[:2]
                 two_d_features = features.view(batch_size * n_slices, -1)
                 train_feature_space.append(two_d_features.contiguous().cpu().numpy())
             else:
+                # print(f"{i}: length==2.")
                 train_feature_space.append(features.contiguous().cpu().numpy())
-        print(f"get_train_feature_space: concataneting features")
+        # print(f"get_train_feature_space: concataneting features")
+        # train_feature_space = torch.cat(train_feature_space, dim=0)
+        #
         train_feature_space = np.concatenate(train_feature_space, axis=0)
+    print(f"get_train_feature_space: done.")
     return train_feature_space
 
 
