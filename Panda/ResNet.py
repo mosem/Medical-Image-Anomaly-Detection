@@ -279,16 +279,6 @@ class ResNet3D(nn.Module):
         x = x.reshape(batch_size*n_frames, n_channels, height, width)
         pred, features = self.resNet2D.forward(x)  # batch_size*frames x features_dimension
         return torch.stack(pred.split(n_frames,0),dim=0), torch.stack(features.split(n_frames, 0), dim=0)
-        # output_pred = []  # batch_size x frames x 1
-        # output_features = []  # batch_size x frames x features_dimension
-        # for sample in torch.split(x, 1, 0):
-        #     sample = sample.squeeze()
-        #     # sample is size of channels x frames x height x width
-        #     slices = sample.permute((1,0,2,3)) # frames x channels x height x width
-        #     slices_pred, slices_features = self.resNet2D.forward(slices) # frames x features_dimension
-        #     output_pred.append(slices_pred)
-        #     output_features.append(slices_features)
-        # return torch.stack(output_pred, dim=0), torch.stack(output_features, dim=0)
 
 
 def _resnet(arch, block, layers, pretrained, progress, **kwargs):

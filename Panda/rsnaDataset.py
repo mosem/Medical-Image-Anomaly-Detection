@@ -8,6 +8,7 @@ from PIL import Image
 from torchvision import transforms
 import ast
 import pandas as pd
+from torchvision.transforms.functional import rotate
 
 
 def window_image(pixel_array, window_center, window_width, is_normalize=True):
@@ -37,6 +38,36 @@ def normalize_dicom(dicom):
     image_array = (image_array*255).astype(np.uint8)
     image = Image.fromarray(image_array)
     return image
+
+class RsnaDataset3dRotated(torch.utils.data.Dataset):
+
+    def __init__(self, lookup_table_file_paths, transform, n_slices=16, rotations=[0,90,180,270]):
+        frames = [read_csv(path, index_col=[0]) for path in lookup_table_file_paths]
+        self.lookup_table = pd.concat(frames, sort=False, ignore_index=True)
+        self.transform = transform
+        self.targets = self.lookup_table['label'].to_numpy()
+        self.ids = self.lookup_table['ID'].to_numpy()
+        self.n_slices = n_slices
+        self.rotations = rotations
+
+    def __len__(self):
+        return len(self.targets) * self.n_slices * len(self.rotations)
+
+
+    def __getitem__(self, idx):
+        session_idx = idx // (self.n_slices * len(self.rotations))
+        slice_idx = idx % (self.n_slices * len(self.rotations)) // len(self.rotations)
+        rotation_idx = idx % (self.n_slices * len(self.rotations)) % len(self.rotations)
+        img_paths = ast.literal_eval(self.lookup_table.loc[session_idx, 'filepaths'])
+        image = self.__get_image(img_paths[slice_idx])
+        return rotate(image, self.rotations[rotation_idx]), rotation_idx
+
+
+    def __get_image(self, img_path):
+        with Image.open(img_path) as image:
+            tensor_image = self.transform(image) # CxHxW
+        return tensor_image
+
 
 class RsnaDataset3D(torch.utils.data.Dataset):
 
@@ -181,12 +212,6 @@ def get_loaders3D(lookup_tables_paths, batch_size):
                                          transforms.CenterCrop(224),
                                          transforms.ToTensor()])
 
-    # train_transform = transforms.Compose([transforms.CenterCrop(448),
-    #                                       transforms.ToTensor()])
-    #
-    # test_transform = transforms.Compose([transforms.CenterCrop(448),
-    #                                      transforms.ToTensor()])
-
     train_dataset = RsnaDataset3D(train_lookup_tables_paths, train_transform)
     test_dataset = RsnaDataset3D(test_lookup_tables_paths, test_transform)
 
@@ -198,3 +223,27 @@ def get_loaders3D(lookup_tables_paths, batch_size):
                                                   shuffle=False, num_workers=2, drop_last=False)
 
     return sorted_train_dataloader, shuffled_train_dataloader, test_dataloader
+
+
+def get_loaders3DSliced(lookup_tables_paths, batch_size):
+    train_lookup_tables_paths, test_lookup_tables_paths = lookup_tables_paths
+
+    train_transform = transforms.Compose([transforms.Resize(256),
+                                          transforms.CenterCrop(224),
+                                          transforms.ToTensor()])
+
+    test_transform = transforms.Compose([transforms.Resize(256),
+                                         transforms.CenterCrop(224),
+                                         transforms.ToTensor()])
+
+    rotations = [0,22.5,45,67.5,90,112.5,135,157.5,180,202.5,225,247.5,270,292.5,315,337.5]
+
+    train_dataset = RsnaDataset3dRotated(train_lookup_tables_paths, train_transform, rotations)
+    test_dataset = RsnaDataset3dRotated(test_lookup_tables_paths, test_transform, rotations)
+
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size,
+                                                   shuffle=True, num_workers=2, drop_last=False)
+    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size,
+                                                  shuffle=False, num_workers=2, drop_last=False)
+
+    return train_dataloader, test_dataloader

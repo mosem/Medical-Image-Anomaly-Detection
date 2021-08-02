@@ -8,6 +8,7 @@ import concurrent.futures
 import pydicom as dicom
 import ast
 from math import ceil
+import statistics
 import shutil
 
 from PIL import Image
@@ -35,6 +36,10 @@ OUTPUT_ROOT_DIR = '/vol/ep/mm/anomaly_detection/data/rsna/local/dir_001'
 
 METADATA_ATTRIBUTES_NAMES = ['PatientID', 'StudyInstanceUID', 'SeriesInstanceUID', 'ImagePositionPatient',
                              'ImageOrientationPatient']
+
+VALID_MEAN = 5.0
+MEAN_THRESHOLD = 0.2
+STDEV_THRESHOLD = 0.01
 
 #Create Metadata tables
 
@@ -182,12 +187,15 @@ def runSavePatientFrames(lookup_tables_root_dir=LOOKUP_TABLES_ROOT_DIR, patient_
 
 # Create table for n-frame dataset
 
-def createRow(table_frame_entry, n_frames, mode='middle'):
+def createRow(table_frame_entry, n_frames, mode='middle', filter=False):
     print(f"Reading table frame: {table_frame_entry.path}")
     table_frame = read_csv(table_frame_entry.path)
     n_rows = len(table_frame.index)
     if n_rows < n_frames:
-        print(f"{table_frame_entry.name}: Not enough rows. n_rows: {n_rows}, n_frames: {n_frames}./nExiting.")
+        print(f"{table_frame_entry.name}: Not enough rows. n_rows: {n_rows}, n_frames: {n_frames}.\nExiting.")
+        return None
+    if filter and not is_z_diffs_valid(table_frame):
+        print(f"{table_frame_entry.name}: Mean/Stdev not valid.")
         return None
     middle_row = n_rows // 2
     if mode == 'middle':
@@ -231,9 +239,49 @@ def createDataset(root_dir, n_frames, n_samples=10000, mode = 'middle'):
     rows = [row for row in rows if row is not None]
     return pd.DataFrame(rows)
 
+def is_z_diffs_valid(table_frame):
+    z_positions = [ast.literal_eval(pos)[2] for pos in table_frame['ImagePositionPatient']]
+    diffs = [j - i for i, j in zip(z_positions[:-1], z_positions[1:])]
+    is_mean_valid = abs(VALID_MEAN - statistics.mean(diffs)) <= MEAN_THRESHOLD
+    is_stdev_valid = statistics.stdev(diffs) <= STDEV_THRESHOLD
+    return is_mean_valid and is_stdev_valid
+
+
+def count_valid_patient_data(root_dir, n_frames, n_samples):
+    print(f"counting valid number of patient tables for {n_frames} frames, out of {n_samples} samples.")
+    valid_table_frame_counter = 0
+    invalid_rows_counter = 0
+    invalid_framerate_counter = 0
+    patient_dirs_entries = [path for path in os.scandir(root_dir) if path.is_dir()]
+    print(len(patient_dirs_entries))
+    for patient_dir_entry in patient_dirs_entries[:n_samples]:
+        table_entries = [entry for entry in os.scandir(patient_dir_entry.path) if entry.name.endswith('.csv')]
+        for table_entry in table_entries:
+            table_frame = read_csv(table_entry.path)
+            n_rows = len(table_frame.index)
+            z_positions = [ast.literal_eval(pos)[2] for pos in table_frame['ImagePositionPatient']]
+            diffs = [j - i for i, j in zip(z_positions[:-1], z_positions[1:])]
+            is_mean_valid = abs(VALID_MEAN - statistics.mean(diffs)) <= MEAN_THRESHOLD
+            is_stdev_valid = statistics.stdev(diffs) <= STDEV_THRESHOLD
+            if n_rows < n_frames:
+                invalid_rows_counter += 1
+                print(f"{table_entry.name}: Not enough rows. n_rows: {n_rows}, n_frames: {n_frames}.")
+            if not is_mean_valid or not is_stdev_valid:
+                invalid_framerate_counter += 1
+                print(f"{table_entry.name}: Mean/Stdev not valid. mean: {statistics.mean(diffs)}, stdev: {statistics.stdev(diffs)}")
+                print(["{0:0.4f}".format(i) for i in diffs])
+            if n_rows >= n_frames and is_mean_valid and is_stdev_valid:
+                valid_table_frame_counter += 1
+                print(f"{table_entry.name} is valid.")
+                break
+
+    print(f"valid patients/n_patients: {valid_table_frame_counter}/{n_samples}")
+    print(f"invalid mean/stdev: {invalid_framerate_counter}")
+    print(f"invalid rows: {invalid_rows_counter}")
+
 
 def runCreateDataset(dataset_path, n_frames = 8, mode = 'middle', patient_tables_root_dir = PATIENT_TABLES_ROOT_DIR):
-    dataset_frame = createDataset(patient_tables_root_dir, n_frames, n_samples=10000, mode = mode)
+    dataset_frame = createDataset(patient_tables_root_dir, n_frames, n_samples=20000, mode = mode)
     dataset_frame.to_csv(dataset_path)
 
 
@@ -253,7 +301,7 @@ def createBalancedClassFrame(dataset_frame, n_samples, start_normal=0, start_ano
     return frame
 
 
-def createFramesForDatasets(dataset_path, n_datasets=5, n_train_samples=1000, n_test_samples=200, output_name='data',output_root_dir=OUTPUT_ROOT_DIR):
+def createFramesForDatasets(dataset_path, n_datasets=10, n_train_samples=1000, n_test_samples=200, output_name='data',output_root_dir=OUTPUT_ROOT_DIR):
     dataset_frame = read_csv(dataset_path)
     # train_frame_dummy = createOneClassFrame(dataset_frame, 10, 1000)
     # test_frame_dummy = createBalancedClassFrame(dataset_frame, 10, 0, 0)
@@ -261,7 +309,7 @@ def createFramesForDatasets(dataset_path, n_datasets=5, n_train_samples=1000, n_
     # test_frame_dummy.to_csv(os.path.join(OUTPUT_ROOT_DIR, '16-frame-data-test-dummy.csv'), index=False)
     paths = []
     for i in range(n_datasets):
-        train_start = n_test_samples * n_datasets + n_train_samples * i
+        train_start = n_test_samples//2 * n_datasets + n_train_samples * i
         train_end = train_start + n_train_samples - 1
         train_frame = createOneClassFrame(dataset_frame, n_train_samples, train_start)
         train_name = '-'.join([output_name, 'train', str(train_start), str(train_end)]) + '.csv'
@@ -277,17 +325,18 @@ def createFramesForDatasets(dataset_path, n_datasets=5, n_train_samples=1000, n_
         test_frame.to_csv(test_path, index=False)
         print(f'done {test_name}')
 
-        val_start = n_test_samples//2*n_datasets + i*n_test_samples//2
-        val_end = val_start + n_test_samples//2
-        val_frame = createBalancedClassFrame(dataset_frame, n_test_samples, val_start, val_start)
-        val_name = '-'.join([output_name, 'val', str(val_start), str(val_end)]) + '.csv'
-        val_path = os.path.join(output_root_dir, val_name)
-        val_frame.to_csv(val_path, index=False)
+        # val_start = n_test_samples//2*n_datasets + i*n_test_samples//2
+        # val_end = val_start + n_test_samples//2
+        # val_frame = createBalancedClassFrame(dataset_frame, n_test_samples, val_start, val_start)
+        # val_name = '-'.join([output_name, 'val', str(val_start), str(val_end)]) + '.csv'
+        # val_path = os.path.join(output_root_dir, val_name)
+        # val_frame.to_csv(val_path, index=False)
+        # print(f'done {val_name}')
 
         paths.append(train_path)
         paths.append(test_path)
-        paths.append(val_path)
-        print(f'done {val_name}')
+        # paths.append(val_path)
+
 
 
 
@@ -671,19 +720,22 @@ if __name__ == "__main__":
     parser.add_argument('--patient_tables_root_dir', default=PATIENT_TABLES_ROOT_DIR)
     parser.add_argument('--dataset_root_path', default=DATASET_ROOT_PATH)
     parser.add_argument('--output_root_dir', default=OUTPUT_ROOT_DIR)
-    parser.add_argument('--n_frames', default=16, type=int)
+    parser.add_argument('--n_frames', default=24, type=int)
     parser.add_argument('--mode', default='middle')
 
     args = parser.parse_args()
 
-    runCreateLookupTables(data_root_dir_path=args.data_root_dir_path, labels_map_filepath=args.labels_map_filepath,
-                          output_rowdict_filepath=args.output_rowdict_filepath, lookup_tables_root_dir=args.lookup_tables_root_dir)
-    runSavePatientFrames(lookup_tables_root_dir=args.lookup_tables_root_dir, patient_tables_root_dir=args.patient_tables_root_dir)
+    # runCreateLookupTables(data_root_dir_path=args.data_root_dir_path, labels_map_filepath=args.labels_map_filepath,
+    #                       output_rowdict_filepath=args.output_rowdict_filepath, lookup_tables_root_dir=args.lookup_tables_root_dir)
+    # runSavePatientFrames(lookup_tables_root_dir=args.lookup_tables_root_dir, patient_tables_root_dir=args.patient_tables_root_dir)
+
+    # count_valid_patient_data(args.patient_tables_root_dir, 24, 20000)
 
     dataset_name = f'{args.n_frames}-frame-{args.mode}-data'
     dataset_path = os.path.join(DATASET_ROOT_PATH, dataset_name+'.csv')
+
     runCreateDataset(dataset_path, n_frames=args.n_frames, mode=args.mode,
                      patient_tables_root_dir=args.patient_tables_root_dir)
-    paths = createFramesForDatasets(dataset_path, n_datasets=5, n_train_samples=1000, n_test_samples=200,
+    paths = createFramesForDatasets(dataset_path, n_datasets=12, n_train_samples=1000, n_test_samples=200,
                                     output_name=dataset_name, output_root_dir=args.output_root_dir)
     saveDatasets(paths)

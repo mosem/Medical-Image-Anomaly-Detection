@@ -20,6 +20,7 @@ from PIL import Image
 import pydicom as dicom
 from rsnaDataset import window_image
 from pathlib import Path
+import RotNet
 
 from itertools import islice
 
@@ -43,23 +44,27 @@ transform_gray = transforms.Compose([
                                  transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
                                 ])
 
-def get_resnet_model(resnet_type=152):
+def get_resnet_model(resnet_type=152, pretrained=True, **kwargs):
     """
     A function that returns the required pre-trained resnet model
     :param resnet_number: the resnet type
     :return: the pre-trained model
     """
     if resnet_type == 18:
-        return ResNet.resnet18(pretrained=True, progress=True)
+        return ResNet.resnet18(pretrained=pretrained, progress=True, **kwargs)
     elif resnet_type == 50:
-        return ResNet.wide_resnet50_2(pretrained=True, progress=True)
+        return ResNet.wide_resnet50_2(pretrained=pretrained, progress=True, **kwargs)
     elif resnet_type == 101:
-        return ResNet.resnet101(pretrained=True, progress=True)
+        return ResNet.resnet101(pretrained=pretrained, progress=True, **kwargs)
     else:  #152
-        return ResNet.resnet152(pretrained=True, progress=True)
+        return ResNet.resnet152(pretrained=pretrained, progress=True, **kwargs)
 
 def get_timesformer_model(mode):
     return TimeSformerWrapper(mode)
+
+
+def get_rotnet_model(model_path):
+    return RotNet.RotNet3D(model_path)
 
 
 def freeze_model(model):

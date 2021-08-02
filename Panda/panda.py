@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 from ResNet import ResNet3D
+from RotNet import RotNet3D
 from TimeSformerUtils import TimeSformerWrapper
 from losses import CompactnessLoss, EWCLoss
 import utils
@@ -21,7 +22,7 @@ N_SLICES = 16
 
 def train_model(model, sorted_train_loader, shuffled_train_loader, test_loader, device, args, ewc_loss):
     model.eval()
-    is_3d_data = type(model) is ResNet3D
+    is_3d_data = type(model) is ResNet3D or type(model) is RotNet3D
     test_feature_space = get_test_feature_space(model, device, test_loader)
     auc, feature_space, results_per_sample = get_score(model, device, sorted_train_loader, test_loader,
                                                        test_feature_space,args, 0)
@@ -99,7 +100,7 @@ def save_results(results_per_sample, results_per_epoch, results_dir_path, args):
 
 
 def get_features(images, model):
-    if type(model) is ResNet3D:
+    if type(model) is ResNet3D or type(model) is RotNet3D:
         _, features = model(images)
     elif type(model) is TimeSformerWrapper and model.mode == 'standard':
         _, features_bottom = model(images[:, :, :8, ...])
@@ -111,7 +112,7 @@ def get_features(images, model):
 
 
 def get_features_as_numpy(images, model):
-    if type(model) is ResNet3D:
+    if type(model) is ResNet3D or type(model) is RotNet3D:
         _, features = model(images)
         batch_size, n_slices = features.size()[:2]
         features = features.view(batch_size * n_slices, -1).contiguous().cpu().numpy()
@@ -261,7 +262,7 @@ def get_score(model, device, train_loader, test_loader, test_feature_space, args
 
     raw_distances, indices = utils.knn_score(train_feature_space, test_feature_space, n_neighbours=args.n_neighbours)
     summed_distances = np.sum(raw_distances, axis=1)
-    is_3d_data = type(model) is ResNet3D
+    is_3d_data = type(model) is ResNet3D or type(model) is RotNet3D
     # print(f'get_score: is 3d data: {is_3d_data}')
     if is_3d_data:
         summed_distances = np.array(list(map(min, np.split(summed_distances, len(test_labels))))) # MIN from each set of slices
@@ -303,6 +304,8 @@ def main(args):
         model = utils.get_resnet_model(resnet_type=args.resnet_type)
         if args.dataset in ['rsna3D']:
             model = ResNet3D(model)
+    elif model_type == 'rotnet':
+        model = utils.get_rotnet_model(args.rotnet_model_path)
     elif model_type == 'timesformer':
         model = utils.get_timesformer_model(mode=args.timesformer_mode)
     model = model.to(device)
@@ -342,6 +345,8 @@ if __name__ == "__main__":
     parser.add_argument('--model', default='resnet')
     parser.add_argument('--timesformer_mode', default='standard')
     parser.add_argument('--resnet_type', default=152, type=int, help='which resnet to use')
+    parser.add_argument('--rotnet_model_path',
+                        default="/vol/ep/mm/anomaly_detection/rotnet/rotnet_16k_1k")
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--train_lookup_table',
                         default="/vol/ep/mm/anomaly_detection/data/rsna/local/dir_001/8-frame-data-train-2 /lookup_table.csv")
