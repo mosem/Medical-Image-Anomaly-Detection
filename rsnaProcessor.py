@@ -18,7 +18,8 @@ from itertools import islice
 from skimage import measure, filters
 from skimage.morphology import binary_dilation, disk, reconstruction
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
+# matplotlib.use('Agg')
 
 pd.set_option('display.max_columns', None)
 
@@ -38,8 +39,8 @@ METADATA_ATTRIBUTES_NAMES = ['PatientID', 'StudyInstanceUID', 'SeriesInstanceUID
                              'ImageOrientationPatient']
 
 VALID_MEAN = 5.0
-MEAN_THRESHOLD = 0.2
-STDEV_THRESHOLD = 0.01
+MEAN_THRESHOLD = 0.3
+STDEV_THRESHOLD = 0.05
 
 #Create Metadata tables
 
@@ -185,18 +186,15 @@ def runSavePatientFrames(lookup_tables_root_dir=LOOKUP_TABLES_ROOT_DIR, patient_
     savePatientDirectories(patient_frames, patient_tables_root_dir)
 
 
-# Create table for n-frame dataset
-
-def createRow(table_frame_entry, n_frames, mode='middle', filter=False):
-    print(f"Reading table frame: {table_frame_entry.path}")
-    table_frame = read_csv(table_frame_entry.path)
-    n_rows = len(table_frame.index)
-    if n_rows < n_frames:
-        print(f"{table_frame_entry.name}: Not enough rows. n_rows: {n_rows}, n_frames: {n_frames}.\nExiting.")
-        return None
-    if filter and not is_z_diffs_valid(table_frame):
-        print(f"{table_frame_entry.name}: Mean/Stdev not valid.")
-        return None
+def getRangeIdxs(n_rows, n_frames, mode, z_positions):
+    diffs = [j - i for i, j in zip(z_positions[:-1], z_positions[1:])]
+    all_diffs_valid = all(abs(x - VALID_MEAN) <= MEAN_THRESHOLD for x in diffs)
+    if not all_diffs_valid:
+        for i in range(len(diffs) - n_frames):
+            if all(abs(x - VALID_MEAN) <= MEAN_THRESHOLD for x in diffs[i:i+n_frames-1]):
+                start_row = i
+                end_row = i + n_frames - 1
+                return start_row, end_row
     middle_row = n_rows // 2
     if mode == 'middle':
         start_row = middle_row - n_frames // 2
@@ -207,6 +205,23 @@ def createRow(table_frame_entry, n_frames, mode='middle', filter=False):
     elif mode == 'top':
         start_row = middle_row
         end_row = middle_row + n_frames - 1
+    return start_row, end_row
+
+
+# Create table for n-frame dataset
+
+def createRow(table_frame_entry, n_frames, mode='middle', filter=False):
+    print(f"Reading table frame: {table_frame_entry.path}")
+    table_frame = read_csv(table_frame_entry.path)
+    n_rows = len(table_frame.index)
+    if n_rows < n_frames:
+        print(f"{table_frame_entry.name}: Not enough rows. n_rows: {n_rows}, n_frames: {n_frames}.\nExiting.")
+        return None
+    z_positions = [ast.literal_eval(pos)[2] for pos in table_frame['ImagePositionPatient']]
+    if filter and not is_z_diffs_valid(table_frame, n_frames, mode):
+        print(f"{table_frame_entry.name}: Mean/Stdev not valid.")
+        return None
+    start_row, end_row = getRangeIdxs(n_rows, n_frames, mode, z_positions)
     normal = (table_frame.loc[start_row:end_row, ['Label']] == 0).all().bool()
     label = 0 if normal else 1
     indices = [i for i in range(start_row, end_row + 1)]
@@ -214,11 +229,11 @@ def createRow(table_frame_entry, n_frames, mode='middle', filter=False):
     return pd.Series({'path': table_frame_entry.path, 'label': label, 'indices': indices})
 
 
-def createPatientData(patient_dir_entry, n_frames, mode = 'middle'):
+def createPatientData(patient_dir_entry, n_frames, mode = 'middle', filter=False):
     print(f"creating data for patient: {patient_dir_entry}")
     table_entries = [entry for entry in os.scandir(patient_dir_entry.path) if entry.name.endswith('.csv')]
     for i, table_entry in enumerate(table_entries):
-        row = createRow(table_entry, n_frames, mode)
+        row = createRow(table_entry, n_frames, mode, filter)
         if row is not None:
             return row  # create a single row for each patient
         elif i == len(table_entries) - 1:
@@ -227,11 +242,11 @@ def createPatientData(patient_dir_entry, n_frames, mode = 'middle'):
     return None
 
 
-def createDataset(root_dir, n_frames, n_samples=10000, mode = 'middle'):
+def createDataset(root_dir, n_frames, n_samples=10000, mode = 'middle', filter=False):
     print('Creating dataset')
     patient_dirs_entries = [path for path in os.scandir(root_dir) if path.is_dir()]
     n_samples = min(n_samples, len(patient_dirs_entries))
-    args = [(patient_dir_entry, n_frames, mode) for patient_dir_entry in patient_dirs_entries[:n_samples]]
+    args = [(patient_dir_entry, n_frames, mode, filter) for patient_dir_entry in patient_dirs_entries[:n_samples]]
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         rows = executor.map(lambda p: createPatientData(*p), args)
 
@@ -239,15 +254,18 @@ def createDataset(root_dir, n_frames, n_samples=10000, mode = 'middle'):
     rows = [row for row in rows if row is not None]
     return pd.DataFrame(rows)
 
-def is_z_diffs_valid(table_frame):
+def is_z_diffs_valid(table_frame, n_frames, mode='middle'):
+    n_rows = len(table_frame.index)
     z_positions = [ast.literal_eval(pos)[2] for pos in table_frame['ImagePositionPatient']]
+    start_row, end_row = getRangeIdxs(n_rows, n_frames, mode, z_positions)
+    z_positions = z_positions[start_row:end_row + 1]
     diffs = [j - i for i, j in zip(z_positions[:-1], z_positions[1:])]
     is_mean_valid = abs(VALID_MEAN - statistics.mean(diffs)) <= MEAN_THRESHOLD
     is_stdev_valid = statistics.stdev(diffs) <= STDEV_THRESHOLD
     return is_mean_valid and is_stdev_valid
 
 
-def count_valid_patient_data(root_dir, n_frames, n_samples):
+def count_valid_patient_data(root_dir, n_frames, n_samples, mode='middle'):
     print(f"counting valid number of patient tables for {n_frames} frames, out of {n_samples} samples.")
     valid_table_frame_counter = 0
     invalid_rows_counter = 0
@@ -260,6 +278,8 @@ def count_valid_patient_data(root_dir, n_frames, n_samples):
             table_frame = read_csv(table_entry.path)
             n_rows = len(table_frame.index)
             z_positions = [ast.literal_eval(pos)[2] for pos in table_frame['ImagePositionPatient']]
+            start_row, end_row = getRangeIdxs(n_rows, n_frames, mode, z_positions)
+            z_positions = z_positions[start_row:end_row+1]
             diffs = [j - i for i, j in zip(z_positions[:-1], z_positions[1:])]
             is_mean_valid = abs(VALID_MEAN - statistics.mean(diffs)) <= MEAN_THRESHOLD
             is_stdev_valid = statistics.stdev(diffs) <= STDEV_THRESHOLD
@@ -280,16 +300,16 @@ def count_valid_patient_data(root_dir, n_frames, n_samples):
     print(f"invalid rows: {invalid_rows_counter}")
 
 
-def runCreateDataset(dataset_path, n_frames = 8, mode = 'middle', patient_tables_root_dir = PATIENT_TABLES_ROOT_DIR):
-    dataset_frame = createDataset(patient_tables_root_dir, n_frames, n_samples=20000, mode = mode)
+def runCreateDataset(dataset_path, n_frames = 8, mode = 'middle', filter=False, patient_tables_root_dir = PATIENT_TABLES_ROOT_DIR):
+    dataset_frame = createDataset(patient_tables_root_dir, n_frames, n_samples=20000, mode = mode, filter = filter)
     dataset_frame.to_csv(dataset_path)
 
 
 # Create frames for datasets
 
-def createOneClassFrame(dataset_frame, n_samples, start=0):
-    normal_frame, _ = [x.reset_index(drop=True).drop("Unnamed: 0", axis=1) for _, x in dataset_frame.groupby(['label'])]
-    return normal_frame[start:start + n_samples]
+def createOneClassFrame(dataset_frame, n_samples, start=0, normal=True):
+    normal_frame, anomal_frame = [x.reset_index(drop=True).drop("Unnamed: 0", axis=1) for _, x in dataset_frame.groupby(['label'])]
+    return normal_frame[start:start + n_samples] if normal else anomal_frame[start:start + n_samples]
 
 
 def createBalancedClassFrame(dataset_frame, n_samples, start_normal=0, start_anomal=0):
@@ -300,6 +320,21 @@ def createBalancedClassFrame(dataset_frame, n_samples, start_normal=0, start_ano
     frame = pd.concat([normal_frame, anomal_frame], ignore_index=True)
     return frame
 
+def createDatasets(dataset_path, starting_idxs, n_samples=1000, output_name='data',
+                   output_root_dir=OUTPUT_ROOT_DIR, normal=True, train=True):
+    dataset_frame = read_csv(dataset_path)
+    paths = []
+    n_datasets = len(starting_idxs)
+    for i in range(n_datasets):
+        data_frame = createOneClassFrame(dataset_frame, n_samples, starting_idxs[i], normal)
+        mode_name = 'train' if train else 'test'
+        normal_mode = 'normal' if normal else 'anomal'
+        frame_name = '-'.join([output_name, mode_name, normal_mode, str(starting_idxs[i]), str(starting_idxs[i] + n_samples - 1)]) + '.csv'
+        frame_path = os.path.join(output_root_dir, frame_name)
+        data_frame.to_csv(frame_path, index=False)
+        print(f'done {frame_name}')
+        paths.append(frame_path)
+    return paths
 
 def createFramesForDatasets(dataset_path, n_datasets=10, n_train_samples=1000, n_test_samples=200, output_name='data',output_root_dir=OUTPUT_ROOT_DIR):
     dataset_frame = read_csv(dataset_path)
@@ -558,12 +593,12 @@ def saveDataset(table_path, output_dir_name=None, convert_to_png=True, mask_flag
     print(f'done saving to {output_dir_name}')
 
 
-def saveDatasets(table_paths):
+def saveDatasets(table_paths, n_samples):
     for path in table_paths:
         head, tail = os.path.split(path)
         table_name = tail.split('.')[0]
-        saveDataset(path, '-'.join([table_name, 'dcm']), False)  # saving as dicom files
-        saveDataset(path, '-'.join([table_name, 'clean']), True)  # saving as png files
+        saveDataset(path, '-'.join([table_name, 'dcm']), False, n_samples=n_samples)  # saving as dicom files
+        saveDataset(path, '-'.join([table_name, 'clean']), True, n_samples=n_samples)  # saving as png files
 
     # saveDataset(os.path.join(OUTPUT_ROOT_DIR, '16-frame-data-train-dummy.csv'),
     #             '16-frame-data-train-dummy-dcm', False) # saving as dicom files
@@ -676,39 +711,39 @@ def saveDatasets(table_paths):
     #             '8-frame-data-val-5-clean', True)  # saving as png files
 
 
-def test_mask(filepath):
-    dicom_image = dicom.dcmread(filepath)
-    if (dicom_image.BitsStored == 12) and (dicom_image.PixelRepresentation == 0) and (
-            int(dicom_image.RescaleIntercept) > -100):
-        # see: https://www.kaggle.com/jhoward/cleaning-the-data-for-rapid-prototyping-fastai
-        p = dicom_image.pixel_array + 1000
-        p[p >= 4096] = p[p >= 4096] - 4096
-        dicom_image.PixelData = p.tobytes()
-        dicom_image.RescaleIntercept = -1000
-
-    pixel_array = dicom_image.pixel_array * dicom_image.RescaleSlope + dicom_image.RescaleIntercept
-
-    soft_tissue = window_image(pixel_array, 40, 380)
-
-    image_array = (soft_tissue * 255).astype(np.uint8)
-    image = Image.fromarray(image_array)
-
-    mask = get_mask(pixel_array)
-
-    masked_image = np.where(mask>0, image, 0)
-
-
-    fig = plt.figure(figsize=(8, 4))
-    fig.add_subplot(1, 3, 1)
-    plt.imshow(image, cmap=plt.cm.gray)
-
-    fig.add_subplot(1, 3, 2)
-    plt.imshow(mask, cmap=plt.cm.gray)
-
-    fig.add_subplot(1, 3, 3)
-    plt.imshow(masked_image, cmap=plt.cm.gray)
-
-    plt.show()
+# def test_mask(filepath):
+#     dicom_image = dicom.dcmread(filepath)
+#     if (dicom_image.BitsStored == 12) and (dicom_image.PixelRepresentation == 0) and (
+#             int(dicom_image.RescaleIntercept) > -100):
+#         # see: https://www.kaggle.com/jhoward/cleaning-the-data-for-rapid-prototyping-fastai
+#         p = dicom_image.pixel_array + 1000
+#         p[p >= 4096] = p[p >= 4096] - 4096
+#         dicom_image.PixelData = p.tobytes()
+#         dicom_image.RescaleIntercept = -1000
+#
+#     pixel_array = dicom_image.pixel_array * dicom_image.RescaleSlope + dicom_image.RescaleIntercept
+#
+#     soft_tissue = window_image(pixel_array, 40, 380)
+#
+#     image_array = (soft_tissue * 255).astype(np.uint8)
+#     image = Image.fromarray(image_array)
+#
+#     mask = get_mask(pixel_array)
+#
+#     masked_image = np.where(mask>0, image, 0)
+#
+#
+#     fig = plt.figure(figsize=(8, 4))
+#     fig.add_subplot(1, 3, 1)
+#     plt.imshow(image, cmap=plt.cm.gray)
+#
+#     fig.add_subplot(1, 3, 2)
+#     plt.imshow(mask, cmap=plt.cm.gray)
+#
+#     fig.add_subplot(1, 3, 3)
+#     plt.imshow(masked_image, cmap=plt.cm.gray)
+#
+#     plt.show()
 
 
 if __name__ == "__main__":
@@ -720,22 +755,53 @@ if __name__ == "__main__":
     parser.add_argument('--patient_tables_root_dir', default=PATIENT_TABLES_ROOT_DIR)
     parser.add_argument('--dataset_root_path', default=DATASET_ROOT_PATH)
     parser.add_argument('--output_root_dir', default=OUTPUT_ROOT_DIR)
-    parser.add_argument('--n_frames', default=24, type=int)
+    parser.add_argument('--n_frames', default=16, type=int)
     parser.add_argument('--mode', default='middle')
+    parser.add_argument('--filter', default=False)
 
     args = parser.parse_args()
 
-    # runCreateLookupTables(data_root_dir_path=args.data_root_dir_path, labels_map_filepath=args.labels_map_filepath,
-    #                       output_rowdict_filepath=args.output_rowdict_filepath, lookup_tables_root_dir=args.lookup_tables_root_dir)
-    # runSavePatientFrames(lookup_tables_root_dir=args.lookup_tables_root_dir, patient_tables_root_dir=args.patient_tables_root_dir)
+    dataset_name = f'filtered-{args.n_frames}-frame-{args.mode}-data'
+    dataset_path = os.path.join(DATASET_ROOT_PATH, dataset_name + '.csv')
 
-    # count_valid_patient_data(args.patient_tables_root_dir, 24, 20000)
+    # count_valid_patient_data(args.patient_tables_root_dir, 16, 20000, mode='middle')
 
-    dataset_name = f'{args.n_frames}-frame-{args.mode}-data'
-    dataset_path = os.path.join(DATASET_ROOT_PATH, dataset_name+'.csv')
-
-    runCreateDataset(dataset_path, n_frames=args.n_frames, mode=args.mode,
+    if Path(dataset_path).is_file():
+        print(f"{dataset_path} already exists.")
+    else:
+        print(f"creating lookup tables and writing to {args.lookup_tables_root_dir}")
+        runCreateLookupTables(data_root_dir_path=args.data_root_dir_path, labels_map_filepath=args.labels_map_filepath,
+                              output_rowdict_filepath=args.output_rowdict_filepath,
+                              lookup_tables_root_dir=args.lookup_tables_root_dir)
+        print(f"creating patient frames and writing to {args.patient_tables_root_dir}")
+        runSavePatientFrames(lookup_tables_root_dir=args.lookup_tables_root_dir,
+                             patient_tables_root_dir=args.patient_tables_root_dir)
+        print(f"creating dataset and writing to {dataset_path}")
+        runCreateDataset(dataset_path, n_frames=args.n_frames, mode=args.mode, filter=True,
                      patient_tables_root_dir=args.patient_tables_root_dir)
-    paths = createFramesForDatasets(dataset_path, n_datasets=12, n_train_samples=1000, n_test_samples=200,
-                                    output_name=dataset_name, output_root_dir=args.output_root_dir)
-    saveDatasets(paths)
+    # paths = createFramesForDatasets(dataset_path, n_datasets=12, n_train_samples=1000, n_test_samples=200,
+    #                                 output_name=dataset_name, output_root_dir=args.output_root_dir)
+
+    # train_starting_idxs = [0,1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 11000]
+    # train_paths = createDatasets(dataset_path, train_starting_idxs, n_train_samples=1000,
+    #                        output_name=dataset_name, output_root_dir=args.output_root_dir)
+    # saveDatasets(train_paths)
+
+    normal_starting_idxs = [7300,7400,7500]
+    n_normal_samples=100
+    normal_paths = createDatasets(dataset_path, normal_starting_idxs, n_samples=n_normal_samples,
+                                  output_name=dataset_name, output_root_dir=args.output_root_dir, normal=True,
+                                  train=False)
+    saveDatasets(normal_paths, n_normal_samples)
+
+    print('done saving normal paths.')
+
+    anomal_starting_idxs = [300,400,500]
+    n_anomal_samples=100
+    anomal_paths = createDatasets(dataset_path, anomal_starting_idxs, n_samples=n_anomal_samples,
+                                  output_name=dataset_name, output_root_dir=args.output_root_dir, normal=False,
+                                  train=False)
+    saveDatasets(anomal_paths, n_anomal_samples)
+
+    print('done saving anomal paths.')
+

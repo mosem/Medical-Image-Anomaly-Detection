@@ -39,6 +39,32 @@ def normalize_dicom(dicom):
     image = Image.fromarray(image_array)
     return image
 
+
+class RsnaDataset3dSliced(torch.utils.data.Dataset):
+
+    def __init__(self, lookup_table_file_paths, transform, n_slices=16):
+        frames = [read_csv(path, index_col=[0]) for path in lookup_table_file_paths]
+        self.lookup_table = pd.concat(frames, sort=False, ignore_index=True)
+        self.transform = transform
+        self.targets = self.lookup_table['label'].to_numpy()
+        self.ids = self.lookup_table['ID'].to_numpy()
+        self.n_slices = n_slices
+
+    def __len__(self):
+        return len(self.targets) * self.n_slices
+
+    def __getitem__(self, idx):
+        session_idx = idx // self.n_slices
+        slice_idx = idx % self.n_slices
+        img_paths = ast.literal_eval(self.lookup_table.loc[session_idx, 'filepaths'])
+        image = self.__get_image(img_paths[slice_idx])
+        return image
+
+    def __get_image(self, img_path):
+        with Image.open(img_path) as image:
+            tensor_image = self.transform(image)  # CxHxW
+        return tensor_image
+
 class RsnaDataset3dRotated(torch.utils.data.Dataset):
 
     def __init__(self, lookup_table_file_paths, transform, n_slices=16, rotations=[0,90,180,270]):
@@ -52,6 +78,7 @@ class RsnaDataset3dRotated(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.targets) * self.n_slices * len(self.rotations)
+
 
 
     def __getitem__(self, idx):
@@ -206,11 +233,13 @@ def get_loaders3D(lookup_tables_paths, batch_size):
 
     train_transform = transforms.Compose([transforms.Resize(256),
                                           transforms.CenterCrop(224),
-                                          transforms.ToTensor()])
+                                          transforms.ToTensor(),
+                                          transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
     test_transform = transforms.Compose([transforms.Resize(256),
                                          transforms.CenterCrop(224),
-                                         transforms.ToTensor()])
+                                         transforms.ToTensor(),
+                                         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
     train_dataset = RsnaDataset3D(train_lookup_tables_paths, train_transform)
     test_dataset = RsnaDataset3D(test_lookup_tables_paths, test_transform)
@@ -230,16 +259,21 @@ def get_loaders3DSliced(lookup_tables_paths, batch_size):
 
     train_transform = transforms.Compose([transforms.Resize(256),
                                           transforms.CenterCrop(224),
-                                          transforms.ToTensor()])
+                                          transforms.ToTensor(),
+                                          transforms.Normalize(mean=[0.1738, 0.1433, 0.1970],
+                                                               std=[0.3161, 0.2850, 0.3111])])
 
     test_transform = transforms.Compose([transforms.Resize(256),
                                          transforms.CenterCrop(224),
-                                         transforms.ToTensor()])
+                                         transforms.ToTensor(),
+                                         transforms.Normalize(mean=[0.1738, 0.1433, 0.1970],
+                                                              std=[0.3161, 0.2850, 0.3111])])
 
     rotations = [0,22.5,45,67.5,90,112.5,135,157.5,180,202.5,225,247.5,270,292.5,315,337.5]
+    # rotations = [0, 90, 180, 270]
 
-    train_dataset = RsnaDataset3dRotated(train_lookup_tables_paths, train_transform, rotations)
-    test_dataset = RsnaDataset3dRotated(test_lookup_tables_paths, test_transform, rotations)
+    train_dataset = RsnaDataset3dRotated(train_lookup_tables_paths, train_transform, rotations=rotations)
+    test_dataset = RsnaDataset3dRotated(test_lookup_tables_paths, test_transform, rotations=rotations)
 
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size,
                                                    shuffle=True, num_workers=2, drop_last=False)

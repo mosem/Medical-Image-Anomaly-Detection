@@ -4,7 +4,7 @@ import torchvision
 from torchvision import transforms
 from torch.utils.data import Subset, ConcatDataset
 from random import sample
-from rsnaDataset import *
+from rsnaDataset_tmp import *
 
 
 class custom_subset(torch.utils.data.Dataset):

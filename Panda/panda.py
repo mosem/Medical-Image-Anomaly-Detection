@@ -14,6 +14,7 @@ import utils
 from copy import deepcopy
 from tqdm import tqdm
 import pandas as pd
+from statistics import mean
 
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -104,6 +105,7 @@ def get_features(images, model):
         _, features = model(images)
     elif type(model) is TimeSformerWrapper and model.mode == 'standard':
         _, features_bottom = model(images[:, :, :8, ...])
+        # _, features_middle = model(images[:, :, 8:16, ...])
         _, features_top = model(images[:, :, 8:, ...])
         features = torch.cat([features_bottom, features_top], dim=-1)
     else:
@@ -119,6 +121,8 @@ def get_features_as_numpy(images, model):
     elif type(model) is TimeSformerWrapper and model.mode == 'standard':
         _, features_bottom = model(images[:, :, :8, ...])
         features_bottom = features_bottom.contiguous().cpu().numpy()
+        # _, features_middle = model(images[:, :, 8:16, ...])
+        # features_middle = features_middle.contiguous().cpu().numpy()
         _, features_top = model(images[:, :, 8:, ...])
         features_top = features_top.contiguous().cpu().numpy()
         features = np.concatenate([features_bottom, features_top], axis=-1)
@@ -265,7 +269,7 @@ def get_score(model, device, train_loader, test_loader, test_feature_space, args
     is_3d_data = type(model) is ResNet3D or type(model) is RotNet3D
     # print(f'get_score: is 3d data: {is_3d_data}')
     if is_3d_data:
-        summed_distances = np.array(list(map(min, np.split(summed_distances, len(test_labels))))) # MIN from each set of slices
+        summed_distances = np.array(list(map(mean, np.split(summed_distances, len(test_labels))))) # AVG from each set of slices
         indices = np.array(list(map(lambda idx_list: [(i // N_SLICES, i % N_SLICES) for i in idx_list], indices)))
         indices = np.split(indices, len(test_labels))
         raw_distances = np.split(raw_distances, len(test_labels))

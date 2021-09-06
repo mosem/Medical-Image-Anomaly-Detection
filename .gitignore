@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+rotnet/ss-ood-master/one_class_train
+rotnet/ss-ood-master/one_class_test
+*.tar

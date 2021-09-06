@@ -13,7 +13,7 @@ class RotNet3D(nn.Module):
 
     def __init__(self, model_path):
         super(RotNet3D, self).__init__()
-        self.model = utils.get_resnet_model(resnet_type=152, pretrained=False, num_classes=4)
+        self.model = utils.get_resnet_model(resnet_type=152, pretrained=False, num_classes=16)
         state_dict = torch.load(model_path)
         self.model.load_state_dict(state_dict)
 
@@ -56,63 +56,45 @@ def train_model(model, train_loader, test_loader, device, args):
     torch.save(model.state_dict(), output_path)
 
 
-def train_epoch(model, train_loader, optimizer, loss, device, args):
+def train_epoch(model, train_loader, optimizer, loss_fn, device, args):
     running_loss = 0.0
-    for i, data in enumerate(train_loader):
+    for i, (data, labels) in enumerate(train_loader):
         data = data.to(device)
-        target = torch.zeros(data.size(0), dtype=torch.int64, device=device)
-        target_90 = torch.ones(data.size(0), dtype=torch.int64, device=device)
-        target_180 = torch.ones(data.size(0), dtype=torch.int64, device=device) * 2
-        target_270 = torch.ones(data.size(0), dtype=torch.int64, device=device) * 3
+        labels = labels.to(device)
 
-        data_90 = torch.rot90(data, 1, [2, 3])
-        data_180 = torch.rot90(data, 2, [2, 3])
-        data_270 = torch.rot90(data, 3, [2, 3])
+        y, _ = model(data)
 
-        y0, _ = model(data)
-        y1, _ = model(data_90)
-        y2, _ = model(data_180)
-        y3, _ = model(data_270)
-
+        # print(f"y: {y}")
+        # print(f"labels: {labels}")
         # print(f"{y0.type()}, {y1.type()}, {y2.type()}, {y3.type()}")
         # print(f"{y0}, {y1}, {y2}, {y3}")
         #
         # print(f"{target.type()}, {target_90.type()}, {target_180.type()}, {target_270.type()}")
 
         optimizer.zero_grad()
+        loss = loss_fn(y, labels)
 
-        composed_loss = (loss(y0, target) + loss(y1, target_90) + loss(y2, target_180) + loss(y3, target_270)) / 4
-        composed_loss.backward()
+        loss.backward()
         optimizer.step()
 
-        running_loss += composed_loss.item()
+        running_loss += loss.item()
 
     return running_loss / (i + 1)
 
 
 def test_model(model, test_loader, device):
     avg_loss = 0.0
-    loss = CrossEntropyLoss()
+    loss_fn = CrossEntropyLoss()
     model.eval()
     with torch.no_grad():
-        for i, data in enumerate(test_loader):
+        for i, (data, labels) in enumerate(test_loader):
             data = data.to(device)
-            target = torch.zeros(data.size(0), dtype=torch.int64, device=device)
-            target_90 = torch.ones(data.size(0), dtype=torch.int64, device=device)
-            target_180 = torch.ones(data.size(0), dtype=torch.int64, device=device) * 2
-            target_270 = torch.ones(data.size(0), dtype=torch.int64, device=device) * 3
+            labels = labels.to(device)
 
-            data_90 = torch.rot90(data, 1, [2, 3])
-            data_180 = torch.rot90(data, 2, [2, 3])
-            data_270 = torch.rot90(data, 3, [2, 3])
+            y, _ = model(data)
 
-            y0, _ = model(data)
-            y1, _ = model(data_90)
-            y2, _ = model(data_180)
-            y3, _ = model(data_270)
-
-            composed_loss = (loss(y0, target) + loss(y1, target_90) + loss(y2, target_180) + loss(y3, target_270)) / 4
-            avg_loss += composed_loss.item()
+            loss = loss_fn(y, labels)
+            avg_loss += loss.item()
 
     return avg_loss / (i + 1)
 
@@ -131,7 +113,7 @@ def main(args):
     train_dataloader, test_dataloader = get_loaders3DSliced((train_lookup_table_paths, test_lookup_table_paths),
                                                             args.batch_size)
     print("Got dataloaders")
-    model = utils.get_resnet_model(resnet_type=args.resnet_type, pretrained=False, num_classes=4)
+    model = utils.get_resnet_model(resnet_type=args.resnet_type, pretrained=False, num_classes=16)
     model = model.to(device)
     print("Got model")
     train_model(model, train_dataloader, test_dataloader, device, args)
